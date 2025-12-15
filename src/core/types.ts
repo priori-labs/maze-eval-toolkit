@@ -146,6 +146,7 @@ export type EvaluationOutcome =
   | 'timeout'
   | 'empty_response'
   | 'token_limit'
+  | 'api_error'
 
 /**
  * A single evaluation result

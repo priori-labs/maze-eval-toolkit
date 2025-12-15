@@ -118,3 +118,26 @@ WHERE test_set_id = ?
 GROUP BY model
 ORDER BY successes DESC
 `
+
+/**
+ * SQL to update an evaluation result (for retry)
+ */
+export const UPDATE_EVALUATION = `
+UPDATE evaluations SET
+  started_at = ?,
+  completed_at = ?,
+  input_tokens = ?,
+  output_tokens = ?,
+  reasoning_tokens = ?,
+  cost_usd = ?,
+  inference_time_ms = ?,
+  raw_response = ?,
+  parsed_moves = ?,
+  reasoning = ?,
+  outcome = ?,
+  moves_executed = ?,
+  final_position = ?,
+  solution_length = ?,
+  efficiency = ?
+WHERE id = ?
+`

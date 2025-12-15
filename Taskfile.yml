@@ -36,6 +36,11 @@ tasks:
     cmds:
       - bun run src/cli/index.ts delete {{.CLI_ARGS}}
 
+  retry:
+    desc: Retry failed evaluations from a previous run
+    cmds:
+      - bun --env-file=.env run src/cli/index.ts retry {{.CLI_ARGS}}
+
   ui:
     desc: Start the UI viewer
     dir: src/ui

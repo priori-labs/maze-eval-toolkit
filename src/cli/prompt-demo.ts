@@ -89,7 +89,7 @@ async function run() {
   // Output path
   const outputPath = await input({
     message: 'Output file path:',
-    default: './prompt-demo.txt',
+    default: './debug/prompt-demo.txt',
   })
 
   // Ensure directory exists

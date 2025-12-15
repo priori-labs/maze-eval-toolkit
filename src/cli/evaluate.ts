@@ -2,7 +2,7 @@
  * CLI command for running model evaluations
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs'
 import { ExitPromptError } from '@inquirer/core'
 import { checkbox, confirm, input, select } from '@inquirer/prompts'
 import chalk from 'chalk'
@@ -212,6 +212,29 @@ async function runEvaluation(options: EvaluateOptions) {
   console.log(`Run ID: ${chalk.cyan(runId)}`)
   console.log()
 
+  // Setup log file
+  const logDir = './debug'
+  if (!existsSync(logDir)) {
+    mkdirSync(logDir, { recursive: true })
+  }
+  const logPath = `${logDir}/eval-${runId}.log`
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI escape codes
+  const ansiRegex = /\x1b\[[0-9;]*m/g
+  const log = (msg: string) => {
+    console.log(msg)
+    // Strip ANSI color codes for file output
+    const plainMsg = msg.replace(ansiRegex, '')
+    appendFileSync(logPath, `${plainMsg}\n`)
+  }
+
+  // Log header
+  log('LMIQ Evaluation Log')
+  log(`Run ID: ${runId}`)
+  log(`Model: ${model}`)
+  log(`Formats: ${formats.join(', ')}`)
+  log(`Started: ${new Date().toISOString()}`)
+  log('─'.repeat(50))
+
   // Create OpenRouter client
   const client = createClient(apiKey)
 
@@ -225,6 +248,7 @@ async function runEvaluation(options: EvaluateOptions) {
   let parseErrors = 0
   let emptyResponses = 0
   let tokenLimits = 0
+  let apiErrors = 0
   let totalCost = 0
   const startTime = Date.now()
 
@@ -333,7 +357,7 @@ async function runEvaluation(options: EvaluateOptions) {
         const stepsStr = response.parsedMoves
           ? `${response.parsedMoves.length} steps (shortest = ${maze.shortestPath})`
           : '-'
-        console.log(
+        log(
           `${prefix} ${difficulty.padEnd(10)} ${timeStr}  ${costStr.padStart(
             8,
           )}  ${tokensStr}  ${outcomeColor(outcome.padEnd(12))} ${stepsStr}`,
@@ -361,7 +385,7 @@ async function runEvaluation(options: EvaluateOptions) {
           rawResponse: errorMsg,
           parsedMoves: null,
           reasoning: null,
-          outcome: 'failure',
+          outcome: 'api_error',
           movesExecuted: null,
           finalPosition: null,
           solutionLength: null,
@@ -369,7 +393,7 @@ async function runEvaluation(options: EvaluateOptions) {
           efficiency: null,
         })
 
-        failures++
+        apiErrors++
 
         // Insert into database and increment counter
         insertEvaluation(db, result)
@@ -380,10 +404,10 @@ async function runEvaluation(options: EvaluateOptions) {
         const errTimeStr = `${((Date.now() - new Date(startedAt).getTime()) / 1000).toFixed(
           1,
         )}s`.padStart(7)
-        console.log(
+        log(
           `${prefix} ${difficulty.padEnd(10)} ${errTimeStr}  ${'-'.padStart(
             8,
-          )}  ${'-'.padStart(12)}  ${chalk.red('error'.padEnd(12))} ${errorMsg}`,
+          )}  ${'-'.padStart(12)}  ${chalk.red('api_error'.padEnd(12))} ${errorMsg}`,
         )
       }
 
@@ -399,24 +423,24 @@ async function runEvaluation(options: EvaluateOptions) {
 
   // Print summary
   const totalTime = Date.now() - startTime
-  console.log()
-  console.log(chalk.dim('─'.repeat(50)))
-  console.log(chalk.bold('Summary'))
-  console.log(`Model: ${chalk.cyan(model)}`)
-  console.log(`Maze Formats: ${chalk.dim(formats.join(', '))}`)
-  console.log()
-  console.log(`Total: ${completed}`)
-  console.log(
-    `Successes: ${chalk.green(successes)} (${((successes / completed) * 100).toFixed(1)}%)`,
-  )
-  console.log(`Failures: ${chalk.red(failures)}`)
-  console.log(`Parse Errors: ${chalk.yellow(parseErrors)}`)
-  console.log(`Empty Responses: ${chalk.yellow(emptyResponses)}`)
-  console.log(`Token Limits: ${chalk.yellow(tokenLimits)}`)
-  console.log(`Total Time: ${(totalTime / 1000).toFixed(1)}s`)
-  console.log(`Total Cost: ${chalk.cyan(`$${totalCost.toFixed(4)}`)}`)
-  console.log()
-  console.log(`Results saved to: ${chalk.cyan(outputPath)}`)
+  log('')
+  log(chalk.dim('─'.repeat(50)))
+  log(chalk.bold('Summary'))
+  log(`Model: ${chalk.cyan(model)}`)
+  log(`Maze Formats: ${chalk.dim(formats.join(', '))}`)
+  log('')
+  log(`Total: ${completed}`)
+  log(`Successes: ${chalk.green(successes)} (${((successes / completed) * 100).toFixed(1)}%)`)
+  log(`Failures: ${chalk.red(failures)}`)
+  log(`Parse Errors: ${chalk.yellow(parseErrors)}`)
+  log(`Empty Responses: ${chalk.yellow(emptyResponses)}`)
+  log(`Token Limits: ${chalk.yellow(tokenLimits)}`)
+  log(`API Errors: ${chalk.red(apiErrors)}`)
+  log(`Total Time: ${(totalTime / 1000).toFixed(1)}s`)
+  log(`Total Cost: ${chalk.cyan(`$${totalCost.toFixed(4)}`)}`)
+  log('')
+  log(`Results saved to: ${chalk.cyan(outputPath)}`)
+  log(`Log saved to: ${chalk.cyan(logPath)}`)
 }
 
 export const evaluateCommand = new Command('evaluate')

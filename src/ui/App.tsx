@@ -5,6 +5,7 @@ import MazeViewer from './components/MazeViewer'
 import ModelSummary from './components/ModelSummary'
 import Navigation from './components/Navigation'
 import SolutionReplay from './components/SolutionReplay'
+import { Button } from './components/ui'
 
 export default function App() {
   const [testSet, setTestSet] = useState<TestSetFile | null>(null)
@@ -69,20 +70,34 @@ export default function App() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 px-6 py-4">
+      <header className="bg-card border-b border-border px-6 py-4">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold">LMIQ v1 Beta - Maze Viewer</h1>
           <div className="flex gap-4">
-            <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm">
-              Load Test Set
-              <input type="file" accept=".json" onChange={handleTestSetUpload} className="hidden" />
-            </label>
-            <label className="cursor-pointer bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm">
-              Load Results
-              <input type="file" accept=".json" onChange={handleResultsUpload} className="hidden" />
-            </label>
+            <Button asChild>
+              <label className="cursor-pointer">
+                Load Test Set
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleTestSetUpload}
+                  className="hidden"
+                />
+              </label>
+            </Button>
+            <Button asChild variant="secondary">
+              <label className="cursor-pointer">
+                Load Results
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleResultsUpload}
+                  className="hidden"
+                />
+              </label>
+            </Button>
           </div>
         </div>
       </header>
@@ -91,10 +106,11 @@ export default function App() {
       <main className="p-6">
         {!testSet ? (
           <div className="text-center py-20">
-            <p className="text-gray-400 text-lg">Load a test set JSON file to get started</p>
-            <p className="text-gray-500 text-sm mt-2">
-              Generate one with:{' '}
-              <code className="bg-gray-800 px-2 py-1 rounded">task generate</code>
+            <p className="text-muted-foreground text-lg">
+              Load a test set JSON file to get started
+            </p>
+            <p className="text-muted-foreground/60 text-sm mt-2">
+              Generate one with: <code className="bg-card px-2 py-1 rounded">task generate</code>
             </p>
           </div>
         ) : (
@@ -107,18 +123,14 @@ export default function App() {
                   const count = testSet.mazes[d]?.length ?? 0
                   if (count === 0) return null
                   return (
-                    <button
-                      type="button"
+                    <Button
                       key={d}
                       onClick={() => changeDifficulty(d)}
-                      className={`px-4 py-2 rounded text-sm font-medium ${
-                        currentDifficulty === d
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                      }`}
+                      variant={currentDifficulty === d ? 'default' : 'ghost'}
+                      size="sm"
                     >
                       {d} ({count})
-                    </button>
+                    </Button>
                   )
                 })}
               </div>
@@ -128,19 +140,19 @@ export default function App() {
 
               {/* Maze Viewer */}
               {currentMaze && (
-                <div className="bg-gray-800 rounded-lg p-4">
+                <div className="bg-card rounded-lg p-4 border border-border">
                   <div className="flex justify-between items-center mb-4">
                     <div>
-                      <span className="text-gray-400 text-sm">Maze ID: </span>
+                      <span className="text-muted-foreground text-sm">Maze ID: </span>
                       <span className="font-mono text-sm">{currentMaze.id.slice(0, 8)}...</span>
                     </div>
                     <div className="text-sm">
-                      <span className="text-gray-400">Size: </span>
+                      <span className="text-muted-foreground">Size: </span>
                       <span>
                         {currentMaze.width}x{currentMaze.height}
                       </span>
-                      <span className="text-gray-400 ml-4">Shortest Path: </span>
-                      <span className="text-green-400">{currentMaze.shortestPath}</span>
+                      <span className="text-muted-foreground ml-4">Shortest Path: </span>
+                      <span className="text-primary">{currentMaze.shortestPath}</span>
                     </div>
                   </div>
                   <MazeViewer
@@ -180,9 +192,9 @@ export default function App() {
 
               {/* No results message */}
               {currentMaze && mazeResults.length === 0 && (
-                <div className="bg-gray-800 rounded-lg p-4 text-center">
-                  <p className="text-gray-400">No evaluation results for this maze</p>
-                  <p className="text-gray-500 text-sm mt-2">
+                <div className="bg-card rounded-lg p-4 text-center border border-border">
+                  <p className="text-muted-foreground">No evaluation results for this maze</p>
+                  <p className="text-muted-foreground/60 text-sm mt-2">
                     Load results JSON or run an evaluation
                   </p>
                 </div>

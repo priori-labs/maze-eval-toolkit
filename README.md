@@ -2,145 +2,105 @@
 
 AI Maze Solving Benchmark - Test LLM spatial reasoning by evaluating their ability to navigate mazes.
 
-## Overview
-
-LMIQ v1 Beta is a benchmark for evaluating AI models on maze-solving tasks. It includes:
-
-- **Maze Generation**: Procedurally generated mazes using DFS algorithm with configurable difficulty
-- **Evaluation CLI**: Test models via OpenRouter with concurrent request support
-- **Results Storage**: SQLite database for comprehensive evaluation metrics
-- **Viewer UI**: React app to browse mazes and replay AI solutions
-
 ## Quick Start
 
-### Prerequisites
-
-- [Bun](https://bun.sh/) runtime
-- [Task](https://taskfile.dev/) (optional, for convenience commands)
-- OpenRouter API key (for evaluations)
-
-### Installation
-
 ```bash
-git clone https://github.com/your-org/lmiq-v1-beta
-cd lmiq-v1-beta
+# Prerequisites: Bun, Task (optional)
 bun install
-```
 
-### Generate a Test Set
+# Generate test set
+task generate
 
-```bash
-task generate -- --count 10 --output ./data/test-v1.json
-# Or without Task:
-bun run src/cli/index.ts generate --count 10 --output ./data/test-v1.json
-```
+# Run evaluation (interactive)
+export OPENROUTER_API_KEY="your-key"
+task evaluate
 
-### Run an Evaluation
+# View scores
+task score
 
-```bash
-export OPENROUTER_API_KEY="your-api-key"
-task evaluate -- \
-  --test-set ./data/test-v1.json \
-  --model "anthropic/claude-3.5-sonnet" \
-  --concurrency 5 \
-  --output ./results/eval.db
-```
-
-### View Results
-
-```bash
+# View results in UI
 task ui
-# Open http://localhost:5173
 ```
-
-## Difficulty Levels
-
-| Difficulty | Grid Size     | Min Path | Extra Paths |
-|------------|---------------|----------|-------------|
-| simple     | 5-8 × 4-6     | 5        | 0           |
-| easy       | 8-12 × 6-9    | 10       | 6           |
-| medium     | 12-18 × 10-14 | 20       | 10          |
-| hard       | 16-22 × 12-16 | 30       | 15          |
-| nightmare  | 28-38 × 18-22 | 50       | 0           |
 
 ## CLI Commands
 
-### Generate
+| Command | Description |
+|---------|-------------|
+| `task generate` | Generate a test set of mazes |
+| `task evaluate` | Run model evaluation on a test set |
+| `task score` | Compute LMIQ scores from results |
+| `task retry` | Retry failed evaluations |
+| `task export` | Export results to JSON for the UI |
+| `task delete` | Delete evaluation runs |
+| `task ui` | Start the viewer UI |
+| `task studio` | Open Drizzle Studio (DB inspector) |
+| `task backup` | Backup the evaluation database |
 
-```bash
-task generate -- [options]
+## Prompt Formats
 
-Options:
-  -n, --count <n>           Mazes per difficulty (default: 10)
-  -d, --difficulties <list> Comma-separated (default: simple,easy,medium,hard,nightmare)
-  -o, --output <path>       Output JSON file (default: ./data/test-set.json)
-  --name <name>             Test set name
-```
+Models receive maze data in one or more formats:
 
-### Evaluate
+| Format | Description |
+|--------|-------------|
+| `ascii` | Visual grid with `#` walls, `.` paths, `S` start, `G` goal |
+| `block` | Spaced block characters for visual clarity |
+| `adjacency` | Graph adjacency list of cell connections |
+| `edges` | Natural language graph edges with explicit actions |
+| `coordmatrix` | Dense coordinate matrix with move notation |
+| `matrix2d` | Grid + explicit valid moves per cell |
 
-```bash
-task evaluate -- [options]
+Combine multiple: `--formats ascii,edges`
 
-Options:
-  -t, --test-set <path>    Path to test set JSON (required)
-  -m, --model <model>      OpenRouter model ID (required)
-  -c, --concurrency <n>    Concurrent requests (default: 5)
-  -o, --output <path>      SQLite database path (default: ./results/eval.db)
-  -f, --formats <list>     Prompt formats (default: ascii,matrix2d)
-  -k, --api-key <key>      OpenRouter API key (or set OPENROUTER_API_KEY)
-  --dry-run                Parse test set without API calls
-  --limit <n>              Limit number of mazes to evaluate
-```
+## Difficulty Levels
 
-### Prompt Formats
+| Difficulty | Grid Size | Min Path | Extra Paths |
+|------------|-----------|----------|-------------|
+| simple | 5-8 × 4-6 | 5 | 0 |
+| easy | 8-12 × 6-9 | 10 | 6 |
+| medium | 12-18 × 10-14 | 20 | 10 |
+| hard | 16-22 × 12-16 | 30 | 15 |
+| nightmare | 28-38 × 18-22 | 50 | 0 |
 
-- `ascii` - Visual grid with walls and markers
-- `adjacency` - Graph format showing cell connections
-- `coordmatrix` - Dense matrix with move notation
-- `matrix2d` - Grid + explicit valid moves per cell
+## Evaluation Outcomes
 
-Combine multiple: `--formats ascii,matrix2d,adjacency`
+| Outcome | Description |
+|---------|-------------|
+| `success` | Reached goal via valid path |
+| `failure` | Valid moves but didn't reach goal |
+| `invalid_move` | Attempted to walk through a wall |
+| `parse_error` | Couldn't parse moves from response |
+| `empty_response` | Model returned no content |
+| `token_limit` | Model hit token limit while reasoning |
 
-## Evaluation Metrics
+## LMIQ Scoring
 
-Each evaluation records:
+The `score` command computes:
 
-- **Tokens**: Input, output, reasoning tokens
-- **Cost**: USD cost from OpenRouter
-- **Timing**: Total inference time in ms
-- **Response**: Full raw response + parsed moves
-- **Outcome**: success, failure, parse_error, invalid_move
-- **Efficiency**: Ratio of shortest path to actual path taken
+- **Accuracy** - Success rate adjusted by path efficiency
+- **Time Efficiency** - Human reference time / model inference time
+- **LMIQ Score** - Combined time × path efficiency
+- **Energy Efficiency** - Human brain watts vs GPU watts
 
 ## Project Structure
 
 ```
-lmiq-v1-beta/
-├── src/
-│   ├── core/           # Maze generation, solving, rendering
-│   ├── cli/            # CLI commands (generate, evaluate)
-│   ├── db/             # SQLite database layer
-│   ├── llm/            # OpenRouter integration
-│   └── ui/             # React viewer app
-├── data/               # Generated test sets (gitignored)
-└── results/            # Evaluation databases (gitignored)
+src/
+├── core/     # Maze generation, solving, rendering
+├── cli/      # CLI commands
+├── db/       # SQLite database layer
+├── llm/      # OpenRouter integration
+└── ui/       # React viewer app
+data/         # Generated test sets
+results/      # Evaluation databases
 ```
 
 ## Development
 
 ```bash
-# Format code
-task format
-
-# Lint code
-task lint
-
-# Type check
-task tsc
-
-# Run all checks
-task check
+task format   # Format code
+task lint     # Lint code
+task tsc      # Type check
+task check    # All checks
 ```
 
 ## License

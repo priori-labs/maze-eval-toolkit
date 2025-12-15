@@ -96,8 +96,11 @@ function formatOutcomes(outcomes: Record<string, number>): string {
   if (outcomes.success) parts.push(chalk.green(`${outcomes.success} success`))
   if (outcomes.failure) parts.push(chalk.red(`${outcomes.failure} failure`))
   if (outcomes.parse_error) parts.push(chalk.yellow(`${outcomes.parse_error} parse_error`))
+  if (outcomes.empty_response) parts.push(chalk.yellow(`${outcomes.empty_response} empty_response`))
+  if (outcomes.token_limit) parts.push(chalk.yellow(`${outcomes.token_limit} token_limit`))
   if (outcomes.invalid_move) parts.push(chalk.red(`${outcomes.invalid_move} invalid_move`))
   if (outcomes.timeout) parts.push(chalk.yellow(`${outcomes.timeout} timeout`))
+  if (outcomes.api_error) parts.push(chalk.red(`${outcomes.api_error} api_error`))
   return parts.join(', ') || 'none'
 }
 

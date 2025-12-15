@@ -17,6 +17,7 @@ import {
   GET_EVALUATIONS_BY_TEST_SET,
   GET_MODEL_SUMMARY,
   INSERT_EVALUATION,
+  UPDATE_EVALUATION,
 } from './schema'
 
 /**
@@ -185,4 +186,29 @@ export function createEvaluationResult(partial: Omit<EvaluationResult, 'id'>): E
     id: uuidv4(),
     ...partial,
   }
+}
+
+/**
+ * Update an evaluation result in place (for retry)
+ */
+export function updateEvaluation(db: Database, result: EvaluationResult): void {
+  const query = db.query(UPDATE_EVALUATION)
+  query.run(
+    result.startedAt,
+    result.completedAt,
+    result.inputTokens,
+    result.outputTokens,
+    result.reasoningTokens,
+    result.costUsd,
+    result.inferenceTimeMs,
+    result.rawResponse,
+    result.parsedMoves ? JSON.stringify(result.parsedMoves) : null,
+    result.reasoning,
+    result.outcome,
+    result.movesExecuted,
+    result.finalPosition ? JSON.stringify(result.finalPosition) : null,
+    result.solutionLength,
+    result.efficiency,
+    result.id,
+  )
 }
