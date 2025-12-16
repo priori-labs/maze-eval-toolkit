@@ -10,7 +10,7 @@ import { Command } from 'commander'
 import pLimit from 'p-limit'
 import { v4 as uuidv4 } from 'uuid'
 import { generatePrompt } from '../core/maze-renderer'
-import { validateSolution } from '../core/maze-solver'
+import { validateSolutionWithConstraints } from '../core/maze-solver'
 import type {
   Difficulty,
   EvaluationOutcome,
@@ -249,6 +249,7 @@ async function runEvaluation(options: EvaluateOptions) {
   let emptyResponses = 0
   let tokenLimits = 0
   let apiErrors = 0
+  let constraintViolations = 0
   let totalCost = 0
   const startTime = Date.now()
 
@@ -258,7 +259,7 @@ async function runEvaluation(options: EvaluateOptions) {
   const evaluationPromises = evaluationList.map(({ maze, difficulty }) =>
     limit(async () => {
       // Generate prompt with selected formats
-      const prompt = generatePrompt(maze, formats)
+      const prompt = generatePrompt(maze, formats, maze.specialInstructions)
 
       const startedAt = new Date().toISOString()
       let result: EvaluationResult
@@ -286,21 +287,34 @@ async function runEvaluation(options: EvaluateOptions) {
           outcome = 'parse_error'
           parseErrors++
         } else {
-          // Validate the solution
-          validation = validateSolution(
+          // Validate the solution with constraint checking
+          validation = validateSolutionWithConstraints(
             maze.grid,
             maze.start,
             maze.goal,
             maze.shortestPath,
             response.parsedMoves,
+            maze.requirementType
+              ? {
+                  requirementType: maze.requirementType,
+                  requiredSolutionSubsequence: maze.requiredSolutionSubsequence,
+                  requiredTiles: maze.requiredTiles,
+                }
+              : undefined,
           )
 
           if (!validation.isValid) {
             outcome = 'invalid_move'
             failures++
           } else if (validation.reachesGoal) {
-            outcome = 'success'
-            successes++
+            // Check constraint satisfaction
+            if (validation.constraintsSatisfied === false) {
+              outcome = 'constraint_violated'
+              constraintViolations++
+            } else {
+              outcome = 'success'
+              successes++
+            }
           } else {
             outcome = 'failure'
             failures++
@@ -347,7 +361,10 @@ async function runEvaluation(options: EvaluateOptions) {
         const outcomeColor =
           outcome === 'success'
             ? chalk.green
-            : outcome === 'parse_error' || outcome === 'empty_response' || outcome === 'token_limit'
+            : outcome === 'parse_error' ||
+                outcome === 'empty_response' ||
+                outcome === 'token_limit' ||
+                outcome === 'constraint_violated'
               ? chalk.yellow
               : chalk.red
         const timeStr = `${(response.stats.inferenceTimeMs / 1000).toFixed(1)}s`.padStart(7)
@@ -432,6 +449,7 @@ async function runEvaluation(options: EvaluateOptions) {
   log(`Total: ${completed}`)
   log(`Successes: ${chalk.green(successes)} (${((successes / completed) * 100).toFixed(1)}%)`)
   log(`Failures: ${chalk.red(failures)}`)
+  log(`Constraint Violations: ${chalk.yellow(constraintViolations)}`)
   log(`Parse Errors: ${chalk.yellow(parseErrors)}`)
   log(`Empty Responses: ${chalk.yellow(emptyResponses)}`)
   log(`Token Limits: ${chalk.yellow(tokenLimits)}`)

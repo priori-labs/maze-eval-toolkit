@@ -84,7 +84,7 @@ async function run() {
   })) as PromptFormat[]
 
   // Generate prompt
-  const prompt = generatePrompt(maze, formats)
+  const prompt = generatePrompt(maze, formats, maze.specialInstructions)
 
   // Output path
   const outputPath = await input({

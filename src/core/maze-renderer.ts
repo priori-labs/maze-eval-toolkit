@@ -360,7 +360,11 @@ export const RENDERERS: Record<PromptFormat, MazeRenderer> = {
 /**
  * Generate a complete prompt for LLM evaluation
  */
-export function generatePrompt(maze: GeneratedMaze, formats: PromptFormat[]): string {
+export function generatePrompt(
+  maze: GeneratedMaze,
+  formats: PromptFormat[],
+  specialInstructions?: string,
+): string {
   const sections: string[] = []
 
   // Introduction
@@ -372,6 +376,14 @@ export function generatePrompt(maze: GeneratedMaze, formats: PromptFormat[]): st
   sections.push(`Start position: (${maze.start.x},${maze.start.y})`)
   sections.push(`Goal position: (${maze.goal.x},${maze.goal.y})`)
   sections.push('')
+
+  // Add special requirements if present
+  if (specialInstructions) {
+    sections.push('--- SPECIAL REQUIREMENTS ---')
+    sections.push('')
+    sections.push(specialInstructions)
+    sections.push('')
+  }
 
   // Add requested format sections
   for (const format of formats) {
@@ -404,12 +416,13 @@ export function generatePrompt(maze: GeneratedMaze, formats: PromptFormat[]): st
  * Generate all prompts for a maze
  */
 export function generateAllPrompts(maze: GeneratedMaze): Record<PromptFormat, string> {
+  const specialInstructions = maze.specialInstructions
   return {
-    ascii: generatePrompt(maze, ['ascii']),
-    block: generatePrompt(maze, ['block']),
-    adjacency: generatePrompt(maze, ['adjacency']),
-    edges: generatePrompt(maze, ['edges']),
-    coordmatrix: generatePrompt(maze, ['coordmatrix']),
-    matrix2d: generatePrompt(maze, ['matrix2d']),
+    ascii: generatePrompt(maze, ['ascii'], specialInstructions),
+    block: generatePrompt(maze, ['block'], specialInstructions),
+    adjacency: generatePrompt(maze, ['adjacency'], specialInstructions),
+    edges: generatePrompt(maze, ['edges'], specialInstructions),
+    coordmatrix: generatePrompt(maze, ['coordmatrix'], specialInstructions),
+    matrix2d: generatePrompt(maze, ['matrix2d'], specialInstructions),
   }
 }

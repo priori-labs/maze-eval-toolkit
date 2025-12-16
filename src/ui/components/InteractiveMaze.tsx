@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { validateSolutionWithConstraints } from '../../core/maze-solver'
 import type { Difficulty, MazeWithPrompts, MoveAction, Position } from '../../core/types'
 
 const CELL_SIZE = 36
@@ -21,6 +22,9 @@ export interface HumanMazeResult {
   pathLength: number
   shortestPath: number
   efficiency: number
+  // Constraint validation results
+  constraintsSatisfied?: boolean
+  constraintError?: string
 }
 
 interface InteractiveMazeProps {
@@ -58,6 +62,9 @@ export default function InteractiveMaze({
   const [hasReachedGoal, setHasReachedGoal] = useState(false)
   const [goalReachedTimeMs, setGoalReachedTimeMs] = useState<number | null>(null)
 
+  // Constraint validation state
+  const [constraintError, setConstraintError] = useState<string | null>(null)
+
   // Calculate canvas size
   const canvasWidth = maze.width * CELL_SIZE + WALL_WIDTH
   const canvasHeight = maze.height * CELL_SIZE + WALL_WIDTH
@@ -71,6 +78,7 @@ export default function InteractiveMaze({
     setElapsedMs(0)
     setHasReachedGoal(false)
     setGoalReachedTimeMs(null)
+    setConstraintError(null)
   }, [maze, startImmediately])
 
   // Timer effect
@@ -112,7 +120,16 @@ export default function InteractiveMaze({
   // Move player
   const movePlayer = useCallback(
     (direction: MoveAction) => {
-      if (hasReachedGoal || isObfuscated) return
+      // Allow movement if constraint error (to let user fix their path)
+      if (isObfuscated) return
+      // If at goal with no constraint error, don't allow more moves
+      if (hasReachedGoal && !constraintError) return
+
+      // Clear constraint error when user moves again (they're trying to fix their path)
+      if (constraintError) {
+        setConstraintError(null)
+        setHasReachedGoal(false)
+      }
 
       if (!canMove(playerPos, direction)) return
 
@@ -145,7 +162,7 @@ export default function InteractiveMaze({
         }
       }
     },
-    [playerPos, canMove, hasReachedGoal, isObfuscated, maze.goal, startTime],
+    [playerPos, canMove, hasReachedGoal, isObfuscated, maze.goal, startTime, constraintError],
   )
 
   // Keyboard event handler
@@ -162,6 +179,34 @@ export default function InteractiveMaze({
       // Enter to complete (after reaching goal)
       if (e.code === 'Enter' && hasReachedGoal) {
         e.preventDefault()
+
+        // Validate constraints if maze has them
+        let constraintsSatisfied: boolean | undefined
+        let validationError: string | undefined
+
+        if (maze.requirementType) {
+          const validation = validateSolutionWithConstraints(
+            maze.grid,
+            maze.start,
+            maze.goal,
+            maze.shortestPath,
+            moves,
+            {
+              requirementType: maze.requirementType,
+              requiredSolutionSubsequence: maze.requiredSolutionSubsequence,
+              requiredTiles: maze.requiredTiles,
+            },
+          )
+          constraintsSatisfied = validation.constraintsSatisfied
+          validationError = validation.constraintError
+
+          // If constraints not satisfied, show error and don't complete yet
+          if (constraintsSatisfied === false) {
+            setConstraintError(validationError ?? 'Constraints not satisfied')
+            return
+          }
+        }
+
         const pathLength = moves.length
         const efficiency = pathLength > 0 ? maze.shortestPath / pathLength : 0
 
@@ -173,12 +218,14 @@ export default function InteractiveMaze({
           pathLength,
           shortestPath: maze.shortestPath,
           efficiency,
+          constraintsSatisfied,
+          constraintError: validationError,
         })
         return
       }
 
-      // Arrow keys to move
-      if (!isObfuscated && !hasReachedGoal) {
+      // Arrow keys to move (also allowed when constraint error to let user fix path)
+      if (!isObfuscated && (!hasReachedGoal || constraintError)) {
         switch (e.code) {
           case 'ArrowUp':
             e.preventDefault()
@@ -211,6 +258,7 @@ export default function InteractiveMaze({
     moves,
     goalReachedTimeMs,
     maze,
+    constraintError,
   ])
 
   // Focus container for keyboard events
@@ -370,17 +418,39 @@ export default function InteractiveMaze({
         )}
       </div>
 
-      {/* Instructions - below maze */}
-      {!isObfuscated && !hasReachedGoal && (
-        <div className="mt-4 text-[14px] text-muted-foreground font-mono">
-          <span className="text-foreground">←↑↓→</span> move
+      {/* Instructions / ENTER prompt - consistent position below maze */}
+      <div className="mt-4 text-[14px] text-muted-foreground font-mono h-5 flex items-center justify-center">
+        {!isObfuscated && !hasReachedGoal && (
+          <>
+            <span className="text-foreground">←↑↓→</span> move
+          </>
+        )}
+        {hasReachedGoal && !constraintError && (
+          <span className="text-[11px]">
+            Press <span className="text-foreground">ENTER</span> to continue
+          </span>
+        )}
+      </div>
+
+      {/* Constraint error - shown when constraints not satisfied */}
+      {constraintError && (
+        <div className="mt-4 max-w-md text-center">
+          <div className="text-[11px] text-red-400 border border-red-600/50 rounded px-3 py-2 bg-red-950/20">
+            <span className="font-semibold">Constraints not met:</span> {constraintError}
+            <div className="mt-1 text-muted-foreground">
+              Continue moving to satisfy the requirements, then press ENTER again.
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Press ENTER prompt - below maze when goal reached */}
-      {hasReachedGoal && (
-        <div className="mt-4 text-[11px] text-muted-foreground font-mono">
-          Press <span className="text-foreground">ENTER</span> to continue
+      {/* Special instructions - shown below controls when maze has constraints */}
+      {!isObfuscated && maze.specialInstructions && (
+        <div className="mt-4 max-w-md text-center">
+          <div className="text-yellow-500 border border-yellow-600/50 rounded px-3 py-2 dark:bg-yellow-950/20">
+            <p className="mb-1 text-[16px] font-semibold">Special Requirements:</p>
+            <p className="text-[14px]">{maze.specialInstructions}</p>
+          </div>
         </div>
       )}
     </div>

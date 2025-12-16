@@ -82,6 +82,9 @@ interface HumanMazeResult {
   pathLength: number
   shortestPath: number
   efficiency: number
+  // Constraint validation results
+  constraintsSatisfied?: boolean
+  constraintError?: string
 }
 
 // Human evaluation submission
@@ -108,6 +111,9 @@ app.post('/api/human-evals', async (c) => {
 
     // Create and insert evaluation records for each maze result
     for (const result of results) {
+      // Determine outcome based on constraint satisfaction
+      const outcome = result.constraintsSatisfied === false ? 'constraint_violated' : 'success'
+
       const evaluation: EvaluationResult = {
         id: uuidv4(),
         runId,
@@ -126,8 +132,8 @@ app.post('/api/human-evals', async (c) => {
         inferenceTimeMs: result.timeMs,
         rawResponse: JSON.stringify(result.moves),
         parsedMoves: result.moves,
-        reasoning: null,
-        outcome: 'success',
+        reasoning: result.constraintError ?? null, // Store constraint error in reasoning field
+        outcome,
         movesExecuted: result.pathLength,
         finalPosition: null, // Could calculate this but not essential
         solutionLength: result.pathLength,

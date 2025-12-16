@@ -11,6 +11,11 @@ tasks:
     cmds:
       - bun run src/cli/index.ts generate {{.CLI_ARGS}}
 
+  import:
+    desc: Import mazes from JSON files in input/ directory
+    cmds:
+      - bun run src/cli/index.ts import {{.CLI_ARGS}}
+
   evaluate:
     desc: Run model evaluation on a test set
     cmds:

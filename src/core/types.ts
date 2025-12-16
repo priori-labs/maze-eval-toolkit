@@ -58,6 +58,19 @@ export type MoveAction = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT'
 export const VALID_MOVES: MoveAction[] = ['UP', 'DOWN', 'LEFT', 'RIGHT']
 
 /**
+ * Constraint requirement types for imported mazes
+ */
+export type RequirementType = 'REQUIRED_SUBSEQUENCE' | 'REQUIRED_TILES' | null
+
+/**
+ * A move-position pair for subsequence constraints
+ */
+export interface RequiredMove {
+  move: MoveAction
+  position: Position
+}
+
+/**
  * A generated maze with all its metadata
  */
 export interface GeneratedMaze {
@@ -70,6 +83,11 @@ export interface GeneratedMaze {
   goal: Position
   shortestPath: number
   generatedAt: string
+  // Constraint fields (optional for backward compatibility)
+  requirementType?: RequirementType
+  requiredSolutionSubsequence?: RequiredMove[]
+  requiredTiles?: Position[]
+  specialInstructions?: string
 }
 
 /**
@@ -108,6 +126,9 @@ export interface SolutionValidation {
   finalPosition: Position
   errorAtMove?: number
   errorMessage?: string
+  // Constraint validation results
+  constraintsSatisfied?: boolean
+  constraintError?: string
 }
 
 /**
@@ -147,6 +168,7 @@ export type EvaluationOutcome =
   | 'empty_response'
   | 'token_limit'
   | 'api_error'
+  | 'constraint_violated'
 
 /**
  * A single evaluation result
