@@ -8,6 +8,9 @@ interface HumanEvalProps {
   runName: string
   testSet: TestSetFile
   onComplete: () => void
+  skipReady?: boolean
+  isQuickRun?: boolean
+  onQuickRunNext?: () => void
 }
 
 // Fisher-Yates shuffle
@@ -20,7 +23,14 @@ function shuffleArray<T>(array: T[]): T[] {
   return shuffled
 }
 
-export default function HumanEval({ runName, testSet, onComplete }: HumanEvalProps) {
+export default function HumanEval({
+  runName,
+  testSet,
+  onComplete,
+  skipReady = false,
+  isQuickRun = false,
+  onQuickRunNext,
+}: HumanEvalProps) {
   // Shuffle all mazes from all difficulties
   const shuffledMazes = useMemo(() => {
     const allMazes: MazeWithPrompts[] = []
@@ -33,12 +43,13 @@ export default function HumanEval({ runName, testSet, onComplete }: HumanEvalPro
 
   // State
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [isObfuscated, setIsObfuscated] = useState(true)
+  const [isObfuscated, setIsObfuscated] = useState(!skipReady)
   const [results, setResults] = useState<HumanMazeResult[]>([])
   const [startedAt] = useState(() => new Date().toISOString())
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isComplete, setIsComplete] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [currentStats, setCurrentStats] = useState({ moves: 0, elapsedMs: 0 })
 
   const currentMaze = shuffledMazes[currentIndex]
   const totalMazes = shuffledMazes.length
@@ -47,6 +58,11 @@ export default function HumanEval({ runName, testSet, onComplete }: HumanEvalPro
   // Handle maze reveal
   const handleReveal = useCallback(() => {
     setIsObfuscated(false)
+  }, [])
+
+  // Handle stats change from InteractiveMaze
+  const handleStatsChange = useCallback((stats: { moves: number; elapsedMs: number }) => {
+    setCurrentStats(stats)
   }, [])
 
   // Submit results to server
@@ -88,6 +104,12 @@ export default function HumanEval({ runName, testSet, onComplete }: HumanEvalPro
   // Handle maze completion
   const handleMazeComplete = useCallback(
     (result: HumanMazeResult) => {
+      // Quick run mode - load next random maze
+      if (isQuickRun && onQuickRunNext) {
+        onQuickRunNext()
+        return
+      }
+
       const newResults = [...results, result]
       setResults(newResults)
 
@@ -100,7 +122,7 @@ export default function HumanEval({ runName, testSet, onComplete }: HumanEvalPro
         submitResults(newResults)
       }
     },
-    [results, currentIndex, totalMazes, submitResults],
+    [results, currentIndex, totalMazes, submitResults, isQuickRun, onQuickRunNext],
   )
 
   // Calculate stats for completion screen
@@ -211,27 +233,19 @@ export default function HumanEval({ runName, testSet, onComplete }: HumanEvalPro
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold">{runName}</h2>
-          <p className="text-muted-foreground">
+    <div className="flex flex-col h-full">
+      {/* Header with progress */}
+      <div className="space-y-2 mb-8">
+        <div className="flex justify-between items-center">
+          <p className="text-sm text-muted-foreground">
             Maze {currentIndex + 1} of {totalMazes}
           </p>
-        </div>
-        <div className="text-right">
-          <p className="text-sm text-muted-foreground capitalize">
-            Difficulty: {currentMaze.difficulty}
-          </p>
           <p className="text-sm text-muted-foreground">
-            Size: {currentMaze.width}x{currentMaze.height}
+            {currentStats.moves} moves | {formatTime(currentStats.elapsedMs)}
           </p>
         </div>
+        <Progress value={progress} className="h-1.5" />
       </div>
-
-      {/* Progress bar */}
-      <Progress value={progress} className="h-2" />
 
       {/* Maze */}
       <InteractiveMaze
@@ -240,6 +254,8 @@ export default function HumanEval({ runName, testSet, onComplete }: HumanEvalPro
         isObfuscated={isObfuscated}
         onReveal={handleReveal}
         onComplete={handleMazeComplete}
+        startImmediately={skipReady}
+        onStatsChange={handleStatsChange}
       />
     </div>
   )

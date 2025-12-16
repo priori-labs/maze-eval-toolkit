@@ -3,11 +3,13 @@ import type { EvaluationResult, MazeWithPrompts, Position } from '../../core/typ
 
 const CELL_SIZE = 28
 const WALL_WIDTH = 2
-const PLAYER_COLOR = '#3b82f6' // blue
-const GOAL_COLOR = '#22c55e' // green
-const PATH_COLOR = 'rgba(59, 130, 246, 0.3)' // blue with opacity
-const WALL_COLOR = '#64748b' // slate
-const BG_COLOR = '#1e293b' // dark slate
+const PLAYER_COLOR = '#ffffff' // white
+const PLAYER_GLOW = '#e2e8f0'
+const GOAL_COLOR = '#4ade80' // bright green
+const GOAL_GLOW = '#22c55e'
+const PATH_COLOR = 'rgba(96, 165, 250, 0.2)' // subtle blue path highlight
+const WALL_COLOR = '#e2e8f0' // white/gray walls
+const FLOOR_COLOR = '#1a1a1a' // dark gray
 
 interface MazeViewerProps {
   maze: MazeWithPrompts
@@ -125,11 +127,28 @@ export default function MazeViewer({
     const pathPositions = getPathPositions()
     const pathSet = new Set(pathPositions.map((p) => `${p.x},${p.y}`))
 
-    // Clear canvas
-    ctx.fillStyle = BG_COLOR
+    // Clear canvas with floor color
+    ctx.fillStyle = FLOOR_COLOR
     ctx.fillRect(0, 0, width, height)
 
-    // Draw cells and walls
+    // Draw path highlights
+    for (let y = 0; y < maze.height; y++) {
+      for (let x = 0; x < maze.width; x++) {
+        if (pathSet.has(`${x},${y}`)) {
+          const cx = x * CELL_SIZE + WALL_WIDTH / 2
+          const cy = y * CELL_SIZE + WALL_WIDTH / 2
+          ctx.fillStyle = PATH_COLOR
+          ctx.fillRect(cx, cy, CELL_SIZE, CELL_SIZE)
+        }
+      }
+    }
+
+    // Draw walls with rounded caps
+    ctx.strokeStyle = WALL_COLOR
+    ctx.lineWidth = WALL_WIDTH
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+
     for (let y = 0; y < maze.height; y++) {
       for (let x = 0; x < maze.width; x++) {
         const cell = maze.grid[y]?.[x]
@@ -137,16 +156,6 @@ export default function MazeViewer({
 
         const cx = x * CELL_SIZE + WALL_WIDTH / 2
         const cy = y * CELL_SIZE + WALL_WIDTH / 2
-
-        // Draw path highlight
-        if (pathSet.has(`${x},${y}`)) {
-          ctx.fillStyle = PATH_COLOR
-          ctx.fillRect(cx, cy, CELL_SIZE, CELL_SIZE)
-        }
-
-        // Draw walls
-        ctx.strokeStyle = WALL_COLOR
-        ctx.lineWidth = WALL_WIDTH
 
         if (cell.walls.top) {
           ctx.beginPath()
@@ -175,38 +184,53 @@ export default function MazeViewer({
       }
     }
 
-    // Draw goal
+    // Draw goal with glow effect
     const gx = maze.goal.x * CELL_SIZE + WALL_WIDTH / 2 + CELL_SIZE / 2
     const gy = maze.goal.y * CELL_SIZE + WALL_WIDTH / 2 + CELL_SIZE / 2
+    const goalRadius = CELL_SIZE / 4
+
+    ctx.shadowColor = GOAL_GLOW
+    ctx.shadowBlur = 10
     ctx.fillStyle = GOAL_COLOR
     ctx.beginPath()
-    ctx.arc(gx, gy, CELL_SIZE / 3, 0, Math.PI * 2)
+    ctx.arc(gx, gy, goalRadius, 0, Math.PI * 2)
     ctx.fill()
-    ctx.fillStyle = 'white'
-    ctx.font = 'bold 12px sans-serif'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText('G', gx, gy)
+    ctx.shadowBlur = 0
 
-    // Draw player
+    // Draw player as white rounded square with glow
     const px = playerPos.x * CELL_SIZE + WALL_WIDTH / 2 + CELL_SIZE / 2
     const py = playerPos.y * CELL_SIZE + WALL_WIDTH / 2 + CELL_SIZE / 2
+    const playerSize = CELL_SIZE * 0.4
+    const playerRadius = playerSize / 4
+
+    ctx.shadowColor = PLAYER_GLOW
+    ctx.shadowBlur = 8
     ctx.fillStyle = PLAYER_COLOR
     ctx.beginPath()
-    ctx.arc(px, py, CELL_SIZE / 3, 0, Math.PI * 2)
+    ctx.roundRect(px - playerSize / 2, py - playerSize / 2, playerSize, playerSize, playerRadius)
     ctx.fill()
-    ctx.fillStyle = 'white'
-    ctx.fillText('P', px, py)
+    ctx.shadowBlur = 0
   }, [maze, getPlayerPosition, getPathPositions, width, height])
 
   return (
-    <div className="flex justify-center">
+    <div className="flex flex-col items-center">
       <canvas
         ref={canvasRef}
         width={width}
         height={height}
         className="rounded border border-gray-700"
       />
+      {/* Legend */}
+      <div className="mt-3 flex gap-6 items-center text-[11px] text-muted-foreground font-mono">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 bg-white rounded-[3px] shadow-[0_0_8px_rgba(226,232,240,0.6)]" />
+          <span>You</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-green-400 shadow-[0_0_10px_#22c55e]" />
+          <span>Goal</span>
+        </div>
+      </div>
     </div>
   )
 }

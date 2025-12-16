@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Difficulty, MazeWithPrompts, MoveAction, Position } from '../../core/types'
 
-const CELL_SIZE = 28
+const CELL_SIZE = 36
 const WALL_WIDTH = 2
-const PLAYER_COLOR = '#3b82f6' // blue
-const GOAL_COLOR = '#22c55e' // green
-const PATH_COLOR = 'rgba(59, 130, 246, 0.3)' // blue with opacity
-const WALL_COLOR = '#64748b' // slate
-const BG_COLOR = '#1e293b' // dark slate
-
-// Fixed container size for obfuscation (based on nightmare difficulty max size)
-const FIXED_CONTAINER_SIZE = 600
+const PLAYER_COLOR = '#ffffff' // white
+const PLAYER_GLOW = '#e2e8f0'
+const GOAL_COLOR = '#4ade80' // bright green
+const GOAL_GLOW = '#22c55e'
+const SUCCESS_COLOR = '#60a5fa' // blue-400
+const SUCCESS_GLOW = '#3b82f6' // blue-500
+const PATH_COLOR = 'rgba(96, 165, 250, 0.2)' // subtle blue path highlight
+const WALL_COLOR = '#e2e8f0' // strong white/gray walls
+const FLOOR_COLOR = '#1a1a1a' // dark gray (matching lmiq/apps/mazes --maze-cell: 0 0% 10%)
 
 export interface HumanMazeResult {
   mazeId: string
@@ -27,6 +28,9 @@ interface InteractiveMazeProps {
   isObfuscated: boolean
   onReveal: () => void
   onComplete: (result: HumanMazeResult) => void
+  showPath?: boolean // Show blue path highlight (disabled for human eval, enabled for AI replay)
+  startImmediately?: boolean // Start timer immediately without waiting for reveal
+  onStatsChange?: (stats: { moves: number; elapsedMs: number }) => void
 }
 
 export default function InteractiveMaze({
@@ -34,6 +38,9 @@ export default function InteractiveMaze({
   isObfuscated,
   onReveal,
   onComplete,
+  showPath = false,
+  startImmediately = false,
+  onStatsChange,
 }: InteractiveMazeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -59,10 +66,10 @@ export default function InteractiveMaze({
     setPlayerPos({ ...maze.start })
     setMoves([])
     setPathPositions([{ ...maze.start }])
-    setStartTime(null)
+    setStartTime(startImmediately ? Date.now() : null)
     setElapsedMs(0)
     setHasReachedGoal(false)
-  }, [maze])
+  }, [maze, startImmediately])
 
   // Timer effect
   useEffect(() => {
@@ -74,6 +81,11 @@ export default function InteractiveMaze({
 
     return () => clearInterval(interval)
   }, [startTime, hasReachedGoal])
+
+  // Report stats to parent
+  useEffect(() => {
+    onStatsChange?.({ moves: moves.length, elapsedMs })
+  }, [moves.length, elapsedMs, onStatsChange])
 
   // Check if move is valid (no wall blocking)
   const canMove = useCallback(
@@ -202,11 +214,30 @@ export default function InteractiveMaze({
 
     const pathSet = new Set(pathPositions.map((p) => `${p.x},${p.y}`))
 
-    // Clear canvas
-    ctx.fillStyle = BG_COLOR
+    // Fill entire canvas with floor color (no gridlines)
+    ctx.fillStyle = FLOOR_COLOR
     ctx.fillRect(0, 0, canvasWidth, canvasHeight)
 
-    // Draw cells and walls
+    // Draw path highlights (only for AI replay, not human eval)
+    if (showPath) {
+      for (let y = 0; y < maze.height; y++) {
+        for (let x = 0; x < maze.width; x++) {
+          if (pathSet.has(`${x},${y}`)) {
+            const cx = x * CELL_SIZE + WALL_WIDTH / 2
+            const cy = y * CELL_SIZE + WALL_WIDTH / 2
+            ctx.fillStyle = PATH_COLOR
+            ctx.fillRect(cx, cy, CELL_SIZE, CELL_SIZE)
+          }
+        }
+      }
+    }
+
+    // Draw walls with rounded caps
+    ctx.strokeStyle = WALL_COLOR
+    ctx.lineWidth = WALL_WIDTH
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+
     for (let y = 0; y < maze.height; y++) {
       for (let x = 0; x < maze.width; x++) {
         const cell = maze.grid[y]?.[x]
@@ -214,16 +245,6 @@ export default function InteractiveMaze({
 
         const cx = x * CELL_SIZE + WALL_WIDTH / 2
         const cy = y * CELL_SIZE + WALL_WIDTH / 2
-
-        // Draw path highlight
-        if (pathSet.has(`${x},${y}`)) {
-          ctx.fillStyle = PATH_COLOR
-          ctx.fillRect(cx, cy, CELL_SIZE, CELL_SIZE)
-        }
-
-        // Draw walls
-        ctx.strokeStyle = WALL_COLOR
-        ctx.lineWidth = WALL_WIDTH
 
         if (cell.walls.top) {
           ctx.beginPath()
@@ -252,91 +273,101 @@ export default function InteractiveMaze({
       }
     }
 
-    // Draw goal
+    // Draw goal with glow effect (matching legend style)
     const gx = maze.goal.x * CELL_SIZE + WALL_WIDTH / 2 + CELL_SIZE / 2
     const gy = maze.goal.y * CELL_SIZE + WALL_WIDTH / 2 + CELL_SIZE / 2
-    ctx.fillStyle = GOAL_COLOR
-    ctx.beginPath()
-    ctx.arc(gx, gy, CELL_SIZE / 3, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.fillStyle = 'white'
-    ctx.font = 'bold 12px sans-serif'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText('G', gx, gy)
+    const goalRadius = CELL_SIZE / 4
 
-    // Draw player
-    const px = playerPos.x * CELL_SIZE + WALL_WIDTH / 2 + CELL_SIZE / 2
-    const py = playerPos.y * CELL_SIZE + WALL_WIDTH / 2 + CELL_SIZE / 2
-    ctx.fillStyle = PLAYER_COLOR
-    ctx.beginPath()
-    ctx.arc(px, py, CELL_SIZE / 3, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.fillStyle = 'white'
-    ctx.fillText('P', px, py)
-  }, [maze, playerPos, pathPositions, canvasWidth, canvasHeight])
+    if (hasReachedGoal) {
+      // Draw success blue orb when goal reached
+      ctx.shadowColor = SUCCESS_GLOW
+      ctx.shadowBlur = 12
+      ctx.fillStyle = SUCCESS_COLOR
+      ctx.beginPath()
+      ctx.arc(gx, gy, goalRadius, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.shadowBlur = 0
+    } else {
+      // Draw green goal orb
+      ctx.shadowColor = GOAL_GLOW
+      ctx.shadowBlur = 10
+      ctx.fillStyle = GOAL_COLOR
+      ctx.beginPath()
+      ctx.arc(gx, gy, goalRadius, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.shadowBlur = 0
 
-  // Format elapsed time
-  const formatTime = (ms: number) => {
-    const seconds = Math.floor(ms / 1000)
-    const minutes = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    const tenths = Math.floor((ms % 1000) / 100)
-    return `${minutes}:${secs.toString().padStart(2, '0')}.${tenths}`
-  }
+      // Draw player as a small white rounded square
+      const px = playerPos.x * CELL_SIZE + WALL_WIDTH / 2 + CELL_SIZE / 2
+      const py = playerPos.y * CELL_SIZE + WALL_WIDTH / 2 + CELL_SIZE / 2
+      const playerSize = CELL_SIZE * 0.4
+      const playerRadius = playerSize / 4
+
+      ctx.shadowColor = PLAYER_GLOW
+      ctx.shadowBlur = 8
+      ctx.fillStyle = PLAYER_COLOR
+      ctx.beginPath()
+      ctx.roundRect(px - playerSize / 2, py - playerSize / 2, playerSize, playerSize, playerRadius)
+      ctx.fill()
+      ctx.shadowBlur = 0
+    }
+  }, [maze, playerPos, pathPositions, canvasWidth, canvasHeight, showPath, hasReachedGoal])
 
   return (
     <div
       ref={containerRef}
-      className="relative flex flex-col items-center outline-none"
+      className="relative flex flex-col items-center flex-1 w-full h-full outline-none"
       // biome-ignore lint/a11y/noNoninteractiveTabindex: Interactive game element needs keyboard focus
       tabIndex={0}
     >
-      {/* Timer display */}
-      {!isObfuscated && (
-        <div className="mb-4 text-2xl font-mono tabular-nums">{formatTime(elapsedMs)}</div>
-      )}
+      {/* Legend / Success message - above maze (fixed height to prevent layout shift) */}
+      <div className="mb-4 h-5 flex items-center justify-center">
+        {!isObfuscated && !hasReachedGoal && (
+          <div className="flex items-center gap-6 text-[11px] text-muted-foreground font-mono">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-white rounded-[3px] shadow-[0_0_8px_rgba(226,232,240,0.6)]" />
+              <span>You</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-green-400 shadow-[0_0_10px_#22c55e]" />
+              <span>Goal</span>
+            </div>
+          </div>
+        )}
+        {hasReachedGoal && <div className="text-green-500 font-medium">Maze Complete</div>}
+      </div>
 
-      {/* Fixed size container for consistent blur appearance */}
-      <div
-        className="relative flex items-center justify-center"
-        style={{ width: FIXED_CONTAINER_SIZE, height: FIXED_CONTAINER_SIZE }}
-      >
-        {/* Canvas centered in container */}
-        <div className={isObfuscated ? 'blur-[20px]' : ''}>
-          <canvas
-            ref={canvasRef}
-            width={canvasWidth}
-            height={canvasHeight}
-            className="rounded border border-gray-700"
-          />
-        </div>
+      {/* Container expands to fill available space */}
+      <div className="relative flex flex-1 w-full items-center justify-center">
+        {/* Canvas - hidden until revealed */}
+        <canvas
+          ref={canvasRef}
+          width={canvasWidth}
+          height={canvasHeight}
+          className={`rounded-lg shadow-2xl shadow-black/50 ${isObfuscated ? 'invisible' : ''}`}
+        />
 
-        {/* Obfuscation overlay */}
+        {/* Ready screen - shown before maze is revealed */}
         {isObfuscated && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/50 rounded">
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
             <p className="text-2xl font-bold mb-2">Ready?</p>
             <p className="text-muted-foreground">Press SPACE to start</p>
           </div>
         )}
-
-        {/* Goal reached overlay */}
-        {hasReachedGoal && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 rounded">
-            <p className="text-2xl font-bold text-green-500 mb-2">Goal Reached!</p>
-            <p className="text-lg mb-1">Time: {formatTime(elapsedMs)}</p>
-            <p className="text-lg mb-1">Moves: {moves.length}</p>
-            <p className="text-lg mb-4">
-              Efficiency: {((maze.shortestPath / moves.length) * 100).toFixed(0)}%
-            </p>
-            <p className="text-muted-foreground">Press ENTER to continue</p>
-          </div>
-        )}
       </div>
 
-      {/* Instructions */}
+      {/* Instructions - below maze */}
       {!isObfuscated && !hasReachedGoal && (
-        <div className="mt-4 text-sm text-muted-foreground">Use arrow keys to navigate</div>
+        <div className="mt-4 text-[14px] text-muted-foreground font-mono">
+          <span className="text-foreground">←↑↓→</span> move
+        </div>
+      )}
+
+      {/* Press ENTER prompt - below maze when goal reached */}
+      {hasReachedGoal && (
+        <div className="mt-4 text-[11px] text-muted-foreground font-mono">
+          Press <span className="text-foreground">ENTER</span> to continue
+        </div>
       )}
     </div>
   )

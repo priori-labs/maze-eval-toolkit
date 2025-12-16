@@ -25,6 +25,9 @@ export default function App() {
   // Human eval state
   const [humanEvalRunName, setHumanEvalRunName] = useState('')
   const [humanEvalTestSet, setHumanEvalTestSet] = useState<TestSetFile | null>(null)
+  const [skipReadyScreen, setSkipReadyScreen] = useState(false)
+  const [isQuickRunMode, setIsQuickRunMode] = useState(false)
+  const [quickRunFullTestSet, setQuickRunFullTestSet] = useState<TestSetFile | null>(null)
 
   // Viewer state
   const [testSet, setTestSet] = useState<TestSetFile | null>(null)
@@ -109,13 +112,75 @@ export default function App() {
   const handleStartHumanEval = useCallback((runName: string, evalTestSet: TestSetFile) => {
     setHumanEvalRunName(runName)
     setHumanEvalTestSet(evalTestSet)
+    setSkipReadyScreen(false)
+    setIsQuickRunMode(false)
+    setQuickRunFullTestSet(null)
     setMode('human-eval')
   }, [])
+
+  // Helper to pick a random maze from a test set
+  const pickRandomMaze = useCallback((data: TestSetFile): TestSetFile => {
+    const allMazes = DIFFICULTIES.flatMap((d) => data.mazes[d] ?? [])
+    if (allMazes.length === 0) throw new Error('No mazes found in test set')
+
+    const randomMaze = allMazes[Math.floor(Math.random() * allMazes.length)]!
+
+    return {
+      ...data,
+      name: 'Quick Run',
+      mazes: {
+        simple: [],
+        easy: [],
+        medium: [],
+        hard: [],
+        nightmare: [],
+        [randomMaze.difficulty]: [randomMaze],
+      },
+      summary: {
+        totalMazes: 1,
+        byDifficulty: {
+          simple: 0,
+          easy: 0,
+          medium: 0,
+          hard: 0,
+          nightmare: 0,
+          [randomMaze.difficulty]: 1,
+        },
+      },
+    }
+  }, [])
+
+  // Quick run - load random maze from test-set-mini.json
+  const handleQuickRun = useCallback(async () => {
+    try {
+      const response = await fetch('/api/data/test-set-mini.json')
+      if (!response.ok) throw new Error('Failed to fetch test-set-mini.json')
+      const data = (await response.json()) as TestSetFile
+
+      setQuickRunFullTestSet(data)
+      setHumanEvalRunName('Quick Run')
+      setHumanEvalTestSet(pickRandomMaze(data))
+      setSkipReadyScreen(true)
+      setIsQuickRunMode(true)
+      setMode('human-eval')
+    } catch (err) {
+      alert(`Quick Run failed: ${err}`)
+    }
+  }, [pickRandomMaze])
+
+  // Quick run next - load another random maze
+  const handleQuickRunNext = useCallback(() => {
+    if (!quickRunFullTestSet) return
+    setHumanEvalTestSet(pickRandomMaze(quickRunFullTestSet))
+  }, [quickRunFullTestSet, pickRandomMaze])
 
   const handleHumanEvalComplete = useCallback(() => {
     setMode('viewer')
     setHumanEvalRunName('')
     setHumanEvalTestSet(null)
+    setSkipReadyScreen(false)
+    setIsQuickRunMode(false)
+    setQuickRunFullTestSet(null)
   }, [])
 
   return (
@@ -133,49 +198,10 @@ export default function App() {
           </h1>
           {mode === 'viewer' && (
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Test Set:</span>
-                <Select value={selectedDataFile} onValueChange={handleDataFileSelect}>
-                  <SelectTrigger className="w-[200px]">
-                    <SelectValue placeholder="Select test set..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {dataFiles.length === 0 ? (
-                      <SelectItem value="_none" disabled>
-                        No files found
-                      </SelectItem>
-                    ) : (
-                      dataFiles.map((file) => (
-                        <SelectItem key={file} value={file}>
-                          {file}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Results:</span>
-                <Select value={selectedResultsFile} onValueChange={handleResultsFileSelect}>
-                  <SelectTrigger className="w-[200px]">
-                    <SelectValue placeholder="Select results..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {resultsFiles.length === 0 ? (
-                      <SelectItem value="_none" disabled>
-                        No files found
-                      </SelectItem>
-                    ) : (
-                      resultsFiles.map((file) => (
-                        <SelectItem key={file} value={file}>
-                          {file}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
               <Button onClick={() => setMode('human-eval-setup')}>Human Eval</Button>
+              <Button variant="outline" onClick={handleQuickRun}>
+                Quick Run
+              </Button>
             </div>
           )}
         </div>
@@ -194,6 +220,9 @@ export default function App() {
             runName={humanEvalRunName}
             testSet={humanEvalTestSet}
             onComplete={handleHumanEvalComplete}
+            skipReady={skipReadyScreen}
+            isQuickRun={isQuickRunMode}
+            onQuickRunNext={handleQuickRunNext}
           />
         )}
 
@@ -203,7 +232,27 @@ export default function App() {
             <p className="text-muted-foreground text-lg">
               Load a test set JSON file to get started
             </p>
-            <p className="text-muted-foreground/60 text-sm mt-2">
+            <div className="mt-4">
+              <Select value={selectedDataFile} onValueChange={handleDataFileSelect}>
+                <SelectTrigger className="w-[250px] mx-auto">
+                  <SelectValue placeholder="Select test set..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {dataFiles.length === 0 ? (
+                    <SelectItem value="_none" disabled>
+                      No files found
+                    </SelectItem>
+                  ) : (
+                    dataFiles.map((file) => (
+                      <SelectItem key={file} value={file}>
+                        {file}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-muted-foreground/60 text-sm mt-4">
               Generate one with: <code className="bg-card px-2 py-1 rounded">task generate</code>
             </p>
           </div>
@@ -238,7 +287,7 @@ export default function App() {
                   <div className="flex justify-between items-center mb-4">
                     <div>
                       <span className="text-muted-foreground text-sm">Maze ID: </span>
-                      <span className="font-mono text-sm">{currentMaze.id.slice(0, 8)}...</span>
+                      <span className="font-mono text-sm">{currentMaze.id}</span>
                     </div>
                     <div className="text-sm">
                       <span className="text-muted-foreground">Size: </span>
@@ -261,6 +310,29 @@ export default function App() {
 
             {/* Right Panel - Results */}
             <div className="space-y-4">
+              {/* Results File Select */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Results:</span>
+                <Select value={selectedResultsFile} onValueChange={handleResultsFileSelect}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Select results..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {resultsFiles.length === 0 ? (
+                      <SelectItem value="_none" disabled>
+                        No files found
+                      </SelectItem>
+                    ) : (
+                      resultsFiles.map((file) => (
+                        <SelectItem key={file} value={file}>
+                          {file}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
               {/* Model Summary */}
               {currentMaze && mazeResults.length > 0 && (
                 <ModelSummary

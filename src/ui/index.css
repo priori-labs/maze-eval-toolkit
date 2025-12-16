@@ -33,30 +33,30 @@
   }
 
   .dark {
-    --background: 0 0% 0%;
-    --foreground: 0 0% 100%;
-    --card: 0 0% 7%;
-    --card-foreground: 0 0% 100%;
-    --popover: 0 0% 7%;
-    --popover-foreground: 0 0% 100%;
+    --background: 0 0% 7%;
+    --foreground: 0 0% 95%;
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 95%;
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 95%;
     --primary: 221.2 83.2% 53.3%;
     --primary-foreground: 210 40% 98%;
-    --secondary: 0 0% 10%;
+    --secondary: 0 0% 13%;
     --secondary-foreground: 0 0% 60%;
-    --muted: 0 0% 10%;
-    --muted-foreground: 0 0% 40%;
-    --accent: 0 0% 15%;
+    --muted: 0 0% 13%;
+    --muted-foreground: 0 0% 50%;
+    --accent: 0 0% 16%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 0 0% 20%;
-    --input: 0 0% 7%;
+    --border: 0 0% 18%;
+    --input: 0 0% 10%;
     --ring: 221.2 83.2% 53.3%;
 
     /* Maze-specific colors */
     --maze-wall: 0 0% 100%;
-    --maze-cell: 0 0% 10%;
-    --maze-cell-hidden: 0 0% 4%;
+    --maze-cell: 0 0% 9%;
+    --maze-cell-hidden: 0 0% 5%;
     --maze-player: 0 0% 100%;
   }
 
