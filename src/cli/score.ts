@@ -4,7 +4,7 @@
 
 import { existsSync, readdirSync } from 'node:fs'
 import { ExitPromptError } from '@inquirer/core'
-import { select } from '@inquirer/prompts'
+import { checkbox, select } from '@inquirer/prompts'
 import chalk from 'chalk'
 import { Command } from 'commander'
 import type { Difficulty, EvaluationResult } from '../core/types'
@@ -12,14 +12,25 @@ import { DIFFICULTIES } from '../core/types'
 import { closeDatabase, initDatabase } from '../db/client'
 
 /**
- * Human reference values for scoring
+ * Average human reference values for scoring
  */
 const HUMAN_REFERENCE: Record<Difficulty, { timeSeconds: number; accuracy: number }> = {
-  simple: { timeSeconds: 10, accuracy: 0.95 },
-  easy: { timeSeconds: 20, accuracy: 0.95 },
-  medium: { timeSeconds: 30, accuracy: 0.92 },
-  hard: { timeSeconds: 60, accuracy: 0.9 },
-  nightmare: { timeSeconds: 90, accuracy: 0.85 },
+  simple: { timeSeconds: 10, accuracy: 1.0 },
+  easy: { timeSeconds: 20, accuracy: 1.0 },
+  medium: { timeSeconds: 30, accuracy: 0.98 },
+  hard: { timeSeconds: 60, accuracy: 0.96 },
+  nightmare: { timeSeconds: 90, accuracy: 0.93 },
+}
+
+/**
+ * Elite human reference values (faster times, higher accuracy)
+ */
+const ELITE_HUMAN_REFERENCE: Record<Difficulty, { timeSeconds: number; accuracy: number }> = {
+  simple: { timeSeconds: 4, accuracy: 1.0 },
+  easy: { timeSeconds: 8, accuracy: 1.0 },
+  medium: { timeSeconds: 15, accuracy: 0.99 },
+  hard: { timeSeconds: 25, accuracy: 0.98 },
+  nightmare: { timeSeconds: 60, accuracy: 0.96 },
 }
 
 const HUMAN_BRAIN_WATTS = 20
@@ -27,7 +38,7 @@ const LLM_GPU_WATTS = 350
 
 interface ScoreOptions {
   databasePath: string
-  model?: string
+  models?: string[]
   runId?: string
   testSetId?: string
 }
@@ -46,7 +57,9 @@ interface DifficultyScores {
   accuracy: number
   avgPathEfficiency: number
   avgTimeEfficiency: number
+  avgTimeEfficiencyElite: number
   avgLmiq: number
+  avgLmiqElite: number
   avgInferenceTimeMs: number
   totalCost: number
 }
@@ -57,8 +70,11 @@ interface OverallScores {
   accuracy: number
   adjustedAccuracy: number
   avgTimeEfficiency: number
+  avgTimeEfficiencyElite: number
   avgLmiq: number
+  avgLmiqElite: number
   energyEfficiency: number
+  energyEfficiencyElite: number
   totalInferenceTimeMs: number
   totalCost: number
   promptFormats: string[]
@@ -161,7 +177,9 @@ function computeScores(evaluations: EvaluationResult[]): OverallScores {
         accuracy: 0,
         avgPathEfficiency: 0,
         avgTimeEfficiency: 0,
+        avgTimeEfficiencyElite: 0,
         avgLmiq: 0,
+        avgLmiqElite: 0,
         avgInferenceTimeMs: 0,
         totalCost: 0,
       }
@@ -170,6 +188,7 @@ function computeScores(evaluations: EvaluationResult[]): OverallScores {
 
     const successes = diffEvals.filter((e) => e.outcome === 'success')
     const humanTimeMs = HUMAN_REFERENCE[difficulty].timeSeconds * 1000
+    const eliteTimeMs = ELITE_HUMAN_REFERENCE[difficulty].timeSeconds * 1000
 
     // Path efficiency for successes
     const pathEfficiencies = successes
@@ -180,14 +199,22 @@ function computeScores(evaluations: EvaluationResult[]): OverallScores {
         ? pathEfficiencies.reduce((a, b) => a + b, 0) / pathEfficiencies.length
         : 0
 
-    // Time efficiency per task (capped at 1.0, 0 if failed)
+    // Time efficiency per task (capped at 1.0, 0 if failed) - vs avg human
     const timeEfficiencies = diffEvals.map((e) => {
       if (e.outcome !== 'success') return 0
       return Math.min(humanTimeMs / e.inferenceTimeMs, 1.0)
     })
     const avgTimeEfficiency = timeEfficiencies.reduce((a, b) => a + b, 0) / timeEfficiencies.length
 
-    // LMIQ score per task: time_efficiency × path_efficiency (0 if failed)
+    // Time efficiency per task - vs elite human
+    const timeEfficienciesElite = diffEvals.map((e) => {
+      if (e.outcome !== 'success') return 0
+      return Math.min(eliteTimeMs / e.inferenceTimeMs, 1.0)
+    })
+    const avgTimeEfficiencyElite =
+      timeEfficienciesElite.reduce((a, b) => a + b, 0) / timeEfficienciesElite.length
+
+    // LMIQ score per task: time_efficiency × path_efficiency (0 if failed) - vs avg human
     const lmiqScores = diffEvals.map((e) => {
       if (e.outcome !== 'success') return 0
       const timeEff = Math.min(humanTimeMs / e.inferenceTimeMs, 1.0)
@@ -195,6 +222,15 @@ function computeScores(evaluations: EvaluationResult[]): OverallScores {
       return timeEff * pathEff
     })
     const avgLmiq = lmiqScores.reduce((a, b) => a + b, 0) / lmiqScores.length
+
+    // LMIQ score - vs elite human
+    const lmiqScoresElite = diffEvals.map((e) => {
+      if (e.outcome !== 'success') return 0
+      const timeEff = Math.min(eliteTimeMs / e.inferenceTimeMs, 1.0)
+      const pathEff = e.efficiency !== null ? e.efficiency : 0
+      return timeEff * pathEff
+    })
+    const avgLmiqElite = lmiqScoresElite.reduce((a, b) => a + b, 0) / lmiqScoresElite.length
 
     // Inference time and cost
     const totalInferenceTimeMs = diffEvals.reduce((a, e) => a + e.inferenceTimeMs, 0)
@@ -206,7 +242,9 @@ function computeScores(evaluations: EvaluationResult[]): OverallScores {
       accuracy: successes.length / diffEvals.length,
       avgPathEfficiency,
       avgTimeEfficiency,
+      avgTimeEfficiencyElite,
       avgLmiq,
+      avgLmiqElite,
       avgInferenceTimeMs: totalInferenceTimeMs / diffEvals.length,
       totalCost,
     }
@@ -229,38 +267,52 @@ function computeScores(evaluations: EvaluationResult[]): OverallScores {
 
   // Overall time efficiency (0 if failed, capped at 1.0 if success)
   let totalTimeEfficiency = 0
+  let totalTimeEfficiencyElite = 0
   let timeEfficiencyCount = 0
   for (const e of evaluations) {
     if (e.outcome === 'success') {
       const humanTimeMs = HUMAN_REFERENCE[e.difficulty].timeSeconds * 1000
+      const eliteTimeMs = ELITE_HUMAN_REFERENCE[e.difficulty].timeSeconds * 1000
       totalTimeEfficiency += Math.min(humanTimeMs / e.inferenceTimeMs, 1.0)
+      totalTimeEfficiencyElite += Math.min(eliteTimeMs / e.inferenceTimeMs, 1.0)
     }
     // Failed tasks contribute 0 to time efficiency
     timeEfficiencyCount++
   }
   const avgTimeEfficiency = timeEfficiencyCount > 0 ? totalTimeEfficiency / timeEfficiencyCount : 0
+  const avgTimeEfficiencyElite =
+    timeEfficiencyCount > 0 ? totalTimeEfficiencyElite / timeEfficiencyCount : 0
 
   // Overall LMIQ score
   let totalLmiq = 0
+  let totalLmiqElite = 0
   for (const e of evaluations) {
     const humanTimeMs = HUMAN_REFERENCE[e.difficulty].timeSeconds * 1000
+    const eliteTimeMs = ELITE_HUMAN_REFERENCE[e.difficulty].timeSeconds * 1000
     const timeEff = Math.min(humanTimeMs / e.inferenceTimeMs, 1.0)
+    const timeEffElite = Math.min(eliteTimeMs / e.inferenceTimeMs, 1.0)
     const pathEff = e.outcome === 'success' && e.efficiency !== null ? e.efficiency : 0
     totalLmiq += timeEff * pathEff
+    totalLmiqElite += timeEffElite * pathEff
   }
   const avgLmiq = total > 0 ? totalLmiq / total : 0
+  const avgLmiqElite = total > 0 ? totalLmiqElite / total : 0
 
   // Energy efficiency
   // Human: sum of (human_time_seconds × 20 watts) per difficulty
   // LLM: sum of (inference_time_seconds × 350 watts)
   let humanJoules = 0
+  let eliteHumanJoules = 0
   let llmJoules = 0
   for (const e of evaluations) {
     const humanTimeSeconds = HUMAN_REFERENCE[e.difficulty].timeSeconds
+    const eliteTimeSeconds = ELITE_HUMAN_REFERENCE[e.difficulty].timeSeconds
     humanJoules += humanTimeSeconds * HUMAN_BRAIN_WATTS
+    eliteHumanJoules += eliteTimeSeconds * HUMAN_BRAIN_WATTS
     llmJoules += (e.inferenceTimeMs / 1000) * LLM_GPU_WATTS
   }
   const energyEfficiency = llmJoules > 0 ? humanJoules / llmJoules : 0
+  const energyEfficiencyElite = llmJoules > 0 ? eliteHumanJoules / llmJoules : 0
 
   // Total inference time and cost
   const totalInferenceTimeMs = evaluations.reduce((a, e) => a + e.inferenceTimeMs, 0)
@@ -283,8 +335,11 @@ function computeScores(evaluations: EvaluationResult[]): OverallScores {
     accuracy,
     adjustedAccuracy,
     avgTimeEfficiency,
+    avgTimeEfficiencyElite,
     avgLmiq,
+    avgLmiqElite,
     energyEfficiency,
+    energyEfficiencyElite,
     totalInferenceTimeMs,
     totalCost,
     promptFormats,
@@ -293,17 +348,33 @@ function computeScores(evaluations: EvaluationResult[]): OverallScores {
 }
 
 /**
- * Compute human reference LMIQ score (for comparison)
+ * Compute average human reference LMIQ score (for comparison)
  */
 function computeHumanLmiq(): number {
-  // Human has ~95% accuracy on average, 100% path efficiency (optimal), 100% time efficiency
-  // LMIQ = time_efficiency × path_efficiency × accuracy adjustment
+  // Average human: 100% time efficiency (by definition), 100% path efficiency (optimal)
+  // LMIQ = time_efficiency × path_efficiency × accuracy
   let totalLmiq = 0
   let count = 0
   for (const difficulty of DIFFICULTIES) {
     const humanAcc = HUMAN_REFERENCE[difficulty].accuracy
     // Human LMIQ = 1.0 (time) × 1.0 (path) × accuracy
     totalLmiq += humanAcc
+    count++
+  }
+  return totalLmiq / count
+}
+
+/**
+ * Compute elite human reference LMIQ score (for comparison)
+ */
+function computeEliteHumanLmiq(): number {
+  // Elite human: faster times, higher accuracy, 100% path efficiency (optimal)
+  let totalLmiq = 0
+  let count = 0
+  for (const difficulty of DIFFICULTIES) {
+    const eliteAcc = ELITE_HUMAN_REFERENCE[difficulty].accuracy
+    // Elite Human LMIQ = 1.0 (time) × 1.0 (path) × accuracy
+    totalLmiq += eliteAcc
     count++
   }
   return totalLmiq / count
@@ -317,10 +388,26 @@ function pct(value: number): string {
 }
 
 /**
+ * Format time in seconds to human-readable format (e.g., "3m 2s", "48s", "1h 5m")
+ */
+function formatTime(seconds: number, prefix = ''): string {
+  if (seconds < 60) {
+    return `${prefix}${Math.round(seconds)}s`
+  }
+  if (seconds < 3600) {
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.round(seconds % 60)
+    return secs > 0 ? `${prefix}${mins}m ${secs}s` : `${prefix}${mins}m`
+  }
+  const hours = Math.floor(seconds / 3600)
+  const mins = Math.round((seconds % 3600) / 60)
+  return mins > 0 ? `${prefix}${hours}h ${mins}m` : `${prefix}${hours}h`
+}
+
+/**
  * Print score card
  */
 function printScoreCard(modelName: string, scores: OverallScores): void {
-  const humanLmiq = computeHumanLmiq()
   const avgHumanAccuracy =
     DIFFICULTIES.reduce((a, d) => a + HUMAN_REFERENCE[d].accuracy, 0) / DIFFICULTIES.length
 
@@ -332,50 +419,51 @@ function printScoreCard(modelName: string, scores: OverallScores): void {
   console.log(chalk.dim('─'.repeat(55)))
   console.log()
 
-  // Header
-  console.log(chalk.dim('                      Model        Human Ref'))
-  console.log(chalk.dim('                      ─────        ─────────'))
-
-  // Overall Accuracy
+  // Basic metrics
   const accColor = scores.accuracy >= avgHumanAccuracy ? chalk.green : chalk.yellow
-  console.log(
-    `Overall Accuracy      ${accColor(pct(scores.accuracy).padEnd(12))} ${pct(avgHumanAccuracy)}`,
-  )
-
-  // Adjusted Accuracy
-  console.log(
-    `Adjusted Accuracy     ${chalk.cyan(pct(scores.adjustedAccuracy).padEnd(12))} ${pct(avgHumanAccuracy)}`,
-  )
-
-  // Time Efficiency
-  const timeColor = scores.avgTimeEfficiency >= 0.5 ? chalk.green : chalk.yellow
-  console.log(`Time Efficiency       ${timeColor(pct(scores.avgTimeEfficiency).padEnd(12))} 100.0%`)
-
-  // LMIQ Score
-  const lmiqColor = scores.avgLmiq >= humanLmiq * 0.8 ? chalk.green : chalk.yellow
-  console.log(
-    `LMIQ Score            ${lmiqColor(pct(scores.avgLmiq).padEnd(12))} ${pct(humanLmiq)}`,
-  )
-
-  // Energy Efficiency (as percentage for consistency)
-  const energyColor = scores.energyEfficiency >= 1.0 ? chalk.green : chalk.yellow
-  console.log(
-    `Energy Efficiency     ${energyColor(pct(scores.energyEfficiency).padEnd(12))} 100.0%`,
-  )
+  console.log(`Accuracy              ${accColor(pct(scores.accuracy))}`)
+  console.log(`Adjusted Accuracy     ${chalk.cyan(pct(scores.adjustedAccuracy))}`)
 
   // Time and Cost
   const aiTimeSeconds = scores.totalInferenceTimeMs / 1000
   let humanTotalTimeSeconds = 0
+  let eliteTotalTimeSeconds = 0
   for (const difficulty of DIFFICULTIES) {
     const ds = scores.byDifficulty[difficulty]
     if (ds.total > 0) {
       humanTotalTimeSeconds += HUMAN_REFERENCE[difficulty].timeSeconds * ds.total
+      eliteTotalTimeSeconds += ELITE_HUMAN_REFERENCE[difficulty].timeSeconds * ds.total
     }
   }
+  console.log(`Time                  ${formatTime(aiTimeSeconds)}`)
+  console.log(`Cost                  $${scores.totalCost.toFixed(2)}`)
+
+  // Comparison table
+  console.log()
+  console.log(chalk.dim('vs. Human Baselines:'))
+  console.log(chalk.dim('                      vs. Avg Human    vs. Elite Human'))
+  console.log(chalk.dim('                      ─────────────    ───────────────'))
+
+  // Time Efficiency comparison
+  const timeColor = scores.avgTimeEfficiency >= 0.5 ? chalk.green : chalk.yellow
+  const timeColorElite = scores.avgTimeEfficiencyElite >= 0.5 ? chalk.green : chalk.yellow
   console.log(
-    `Time                  ${`${aiTimeSeconds.toFixed(0)}s`.padEnd(12)} ~${humanTotalTimeSeconds.toFixed(0)}s`,
+    `Time Efficiency       ${timeColor(pct(scores.avgTimeEfficiency).padEnd(16))} ${timeColorElite(pct(scores.avgTimeEfficiencyElite))}`,
   )
-  console.log(`Cost                  ${`$${scores.totalCost.toFixed(2)}`.padEnd(12)} $0`)
+
+  // LMIQ comparison
+  const lmiqColor = scores.avgLmiq >= 0.5 ? chalk.green : chalk.yellow
+  const lmiqColorElite = scores.avgLmiqElite >= 0.5 ? chalk.green : chalk.yellow
+  console.log(
+    `LMIQ Score            ${lmiqColor(pct(scores.avgLmiq).padEnd(16))} ${lmiqColorElite(pct(scores.avgLmiqElite))}`,
+  )
+
+  // Energy Efficiency comparison
+  const energyColor = scores.energyEfficiency >= 1.0 ? chalk.green : chalk.yellow
+  const energyColorElite = scores.energyEfficiencyElite >= 1.0 ? chalk.green : chalk.yellow
+  console.log(
+    `Energy Efficiency     ${energyColor(pct(scores.energyEfficiency).padEnd(16))} ${energyColorElite(pct(scores.energyEfficiencyElite))}`,
+  )
 
   console.log()
   console.log(chalk.bold('By Difficulty:'))
@@ -475,10 +563,7 @@ function printHumanScoreCard(runName: string, evaluations: EvaluationResult[]): 
   console.log()
 
   // Time and energy
-  const minutes = Math.floor(totalTimeSeconds / 60)
-  const seconds = Math.floor(totalTimeSeconds % 60)
-  const timeStr = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`
-  console.log(`Total Time            ${chalk.cyan(timeStr)}`)
+  console.log(`Total Time            ${chalk.cyan(formatTime(totalTimeSeconds))}`)
   console.log(
     `Energy Usage          ${chalk.dim(`${energyJoules.toFixed(0)}J (${energyWh.toFixed(2)} Wh @ 20W brain)`)}`,
   )
@@ -493,7 +578,6 @@ function printHumanScoreCard(runName: string, evaluations: EvaluationResult[]): 
 
     const countStr = String(ds.total).padEnd(8)
     const effStr = pct(ds.avgPathEfficiency).padEnd(11)
-    const timeStr = `${ds.avgTimeSeconds.toFixed(1)}s`
 
     // Color based on efficiency
     const effColor =
@@ -503,7 +587,9 @@ function printHumanScoreCard(runName: string, evaluations: EvaluationResult[]): 
           ? chalk.yellow
           : chalk.red
 
-    console.log(`  ${difficulty.padEnd(12)} ${countStr} ${effColor(effStr)} ${timeStr}`)
+    console.log(
+      `  ${difficulty.padEnd(12)} ${countStr} ${effColor(effStr)} ${formatTime(ds.avgTimeSeconds)}`,
+    )
   }
 
   console.log()
@@ -517,23 +603,12 @@ function printHumanScoreCard(runName: string, evaluations: EvaluationResult[]): 
  */
 function printAllModelsSummary(evaluations: EvaluationResult[]): void {
   const models = getUniqueModels(evaluations)
-  const humanLmiq = computeHumanLmiq()
   const avgHumanAccuracy =
     DIFFICULTIES.reduce((a, d) => a + HUMAN_REFERENCE[d].accuracy, 0) / DIFFICULTIES.length
 
   console.log()
-  console.log(chalk.bold('LMIQ Score Summary - Human Baseline'))
+  console.log(chalk.bold('LMIQ Score Summary'))
   console.log(chalk.dim('─'.repeat(55)))
-  console.log()
-
-  // Header reference
-  console.log(`Overall Accuracy      ${pct(avgHumanAccuracy)}`)
-  console.log(`Adjusted Accuracy     ${pct(avgHumanAccuracy)}`)
-  console.log('Time Efficiency       100.0%')
-  console.log(`LMIQ Score            ${pct(humanLmiq)}`)
-  console.log('Energy Efficiency     100.0%')
-  console.log('Time                  ~Xs per task')
-  console.log('Cost                  $0')
   console.log()
 
   for (const model of models) {
@@ -566,45 +641,45 @@ function printAllModelsSummary(evaluations: EvaluationResult[]): void {
 
       // Calculate times
       const aiTimeSeconds = scores.totalInferenceTimeMs / 1000
-      let humanTotalTimeSeconds = 0
-      for (const difficulty of DIFFICULTIES) {
-        const ds = scores.byDifficulty[difficulty]
-        if (ds.total > 0) {
-          humanTotalTimeSeconds += HUMAN_REFERENCE[difficulty].timeSeconds * ds.total
-        }
-      }
 
       const date = new Date(run.startedAt).toLocaleString()
       console.log(chalk.dim(`Run: ${date} | formats: ${scores.promptFormats.join(', ')}`))
       console.log()
 
+      // Basic metrics
       const accColor = scores.accuracy >= avgHumanAccuracy ? chalk.green : chalk.yellow
-      console.log(
-        `Overall Accuracy      ${accColor(pct(scores.accuracy).padEnd(12))} ${pct(avgHumanAccuracy)}`,
-      )
-      console.log(
-        `Adjusted Accuracy     ${chalk.cyan(pct(scores.adjustedAccuracy).padEnd(12))} ${pct(avgHumanAccuracy)}`,
-      )
+      console.log(`Accuracy              ${accColor(pct(scores.accuracy))}`)
+      console.log(`Adjusted Accuracy     ${chalk.cyan(pct(scores.adjustedAccuracy))}`)
+      console.log(`Time                  ${formatTime(aiTimeSeconds)}`)
+      console.log(`Cost                  $${scores.totalCost.toFixed(2)}`)
 
+      // Comparison table
+      console.log()
+      console.log(chalk.dim('vs. Human Baselines:'))
+      console.log(chalk.dim('                      vs. Avg Human    vs. Elite Human'))
+      console.log(chalk.dim('                      ─────────────    ───────────────'))
+
+      // Time Efficiency comparison
       const timeColor = scores.avgTimeEfficiency >= 0.5 ? chalk.green : chalk.yellow
+      const timeColorElite = scores.avgTimeEfficiencyElite >= 0.5 ? chalk.green : chalk.yellow
       console.log(
-        `Time Efficiency       ${timeColor(pct(scores.avgTimeEfficiency).padEnd(12))} 100.0%`,
+        `Time Efficiency       ${timeColor(pct(scores.avgTimeEfficiency).padEnd(16))} ${timeColorElite(pct(scores.avgTimeEfficiencyElite))}`,
       )
 
-      const lmiqColor = scores.avgLmiq >= humanLmiq * 0.8 ? chalk.green : chalk.yellow
+      // LMIQ comparison
+      const lmiqColor = scores.avgLmiq >= 0.5 ? chalk.green : chalk.yellow
+      const lmiqColorElite = scores.avgLmiqElite >= 0.5 ? chalk.green : chalk.yellow
       console.log(
-        `LMIQ Score            ${lmiqColor(pct(scores.avgLmiq).padEnd(12))} ${pct(humanLmiq)}`,
+        `LMIQ Score            ${lmiqColor(pct(scores.avgLmiq).padEnd(16))} ${lmiqColorElite(pct(scores.avgLmiqElite))}`,
       )
 
+      // Energy Efficiency comparison
       const energyColor = scores.energyEfficiency >= 1.0 ? chalk.green : chalk.yellow
+      const energyColorElite = scores.energyEfficiencyElite >= 1.0 ? chalk.green : chalk.yellow
       console.log(
-        `Energy Efficiency     ${energyColor(pct(scores.energyEfficiency).padEnd(12))} 100.0%`,
+        `Energy Efficiency     ${energyColor(pct(scores.energyEfficiency).padEnd(16))} ${energyColorElite(pct(scores.energyEfficiencyElite))}`,
       )
 
-      console.log(
-        `Time                  ${`${aiTimeSeconds.toFixed(0)}s`.padEnd(12)} ~${humanTotalTimeSeconds.toFixed(0)}s`,
-      )
-      console.log(`Cost                  ${`$${scores.totalCost.toFixed(2)}`.padEnd(12)} $0`)
       console.log()
     }
   }
@@ -646,30 +721,32 @@ async function promptForOptions(): Promise<ScoreOptions> {
     process.exit(1)
   }
 
-  // Select model
-  let model: string | undefined
+  // Select models (multi-select)
+  let selectedModels: string[] = []
   if (models.length === 1) {
-    model = models[0]!
-    console.log(chalk.dim(`Using model: ${model}`))
+    selectedModels = [models[0]!]
+    console.log(chalk.dim(`Using model: ${selectedModels[0]}`))
   } else {
-    const modelChoices = [
-      { name: chalk.bold('Summarize All Models'), value: '__all__' },
-      ...models.map((m) => ({ name: m, value: m })),
-    ]
-    const selectedModel = await select({
-      message: 'Select model to score:',
+    const modelChoices = models.map((m) => ({ name: m, value: m }))
+    selectedModels = await checkbox({
+      message: 'Select models to score (space to select, enter to confirm):',
       choices: modelChoices,
       pageSize: modelChoices.length,
     })
-    model = selectedModel === '__all__' ? undefined : selectedModel
+
+    // If none selected, show all
+    if (selectedModels.length === 0) {
+      return { databasePath, models: undefined, runId: undefined }
+    }
   }
 
-  // If summarizing all, skip run selection
-  if (!model) {
-    return { databasePath, model: undefined, runId: undefined }
+  // If multiple models selected, skip run selection
+  if (selectedModels.length > 1) {
+    return { databasePath, models: selectedModels, runId: undefined }
   }
 
-  // Select run for this model
+  // Single model selected - offer run selection
+  const model = selectedModels[0]!
   let runId: string | undefined
   const runs = getRunsForModel(evaluations, model)
 
@@ -694,11 +771,11 @@ async function promptForOptions(): Promise<ScoreOptions> {
     })
   }
 
-  return { databasePath, model, runId }
+  return { databasePath, models: selectedModels, runId }
 }
 
 async function runScoring(options: ScoreOptions): Promise<void> {
-  const { databasePath, model, runId, testSetId } = options
+  const { databasePath, models, runId, testSetId } = options
 
   // Load all evaluations
   let evaluations = getAllEvaluations(databasePath)
@@ -713,16 +790,16 @@ async function runScoring(options: ScoreOptions): Promise<void> {
     return
   }
 
-  // If no model specified, show summary for all models
-  if (!model) {
+  // If no models specified, show summary for all models
+  if (!models || models.length === 0) {
     printAllModelsSummary(evaluations)
     return
   }
 
-  // Filter by model
-  evaluations = evaluations.filter((e) => e.model === model)
+  // Filter by selected models
+  evaluations = evaluations.filter((e) => models.includes(e.model))
 
-  // Filter by run ID if specified
+  // Filter by run ID if specified (only applies to single model)
   if (runId) {
     evaluations = evaluations.filter((e) => e.runId === runId)
   }
@@ -731,6 +808,15 @@ async function runScoring(options: ScoreOptions): Promise<void> {
     console.log(chalk.red('No evaluations found matching criteria'))
     return
   }
+
+  // If multiple models selected, use summary view
+  if (models.length > 1) {
+    printAllModelsSummary(evaluations)
+    return
+  }
+
+  // Single model - show detailed view
+  const model = models[0]!
 
   // Check if this is a human evaluation (use isHuman flag or model prefix as fallback)
   const isHumanEval = evaluations[0]?.isHuman === true || model.startsWith('human/')
@@ -774,6 +860,7 @@ export const scoreCommand = new Command('score')
     // Non-interactive mode
     const databasePath = options.database as string
     const model = options.model as string | undefined
+    const models = model ? [model] : undefined
     const runId = options.runId as string | undefined
     const testSetId = options.testSet as string | undefined
 
@@ -782,5 +869,5 @@ export const scoreCommand = new Command('score')
       process.exit(1)
     }
 
-    await runScoring({ databasePath, model, runId, testSetId })
+    await runScoring({ databasePath, models, runId, testSetId })
   })
