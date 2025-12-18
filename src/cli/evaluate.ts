@@ -297,7 +297,7 @@ async function runEvaluation(options: EvaluateOptions) {
             maze.requirementType
               ? {
                   requirementType: maze.requirementType,
-                  requiredSolutionSubsequence: maze.requiredSolutionSubsequence,
+                  requiredSolutionSubsequences: maze.requiredSolutionSubsequences,
                   requiredTiles: maze.requiredTiles,
                 }
               : undefined,

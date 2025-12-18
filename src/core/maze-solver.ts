@@ -18,8 +18,9 @@ import { posToKey } from './types'
  */
 export interface MazeConstraints {
   requirementType: RequirementType
-  requiredSolutionSubsequence?: RequiredMove[]
+  requiredSolutionSubsequences?: RequiredMove[][] // Multiple paths (OR logic)
   requiredTiles?: Position[]
+  shortestPathPlaythrough?: RequiredMove[]
 }
 
 /**
@@ -267,6 +268,31 @@ function checkRequiredSubsequence(
 }
 
 /**
+ * Check if solution matches ANY of the required subsequence paths (OR logic)
+ */
+function checkRequiredSubsequences(
+  executedMoves: RequiredMove[],
+  requiredPaths: RequiredMove[][],
+): { satisfied: boolean; error?: string; matchedPathIndex?: number } {
+  if (requiredPaths.length === 0) {
+    return { satisfied: true }
+  }
+
+  // Try each path - if ANY matches, return satisfied
+  for (let i = 0; i < requiredPaths.length; i++) {
+    const result = checkRequiredSubsequence(executedMoves, requiredPaths[i]!)
+    if (result.satisfied) {
+      return { satisfied: true, matchedPathIndex: i }
+    }
+  }
+
+  return {
+    satisfied: false,
+    error: `Solution did not match any of the ${requiredPaths.length} valid subsequence path(s)`,
+  }
+}
+
+/**
  * Check if all required tiles were visited (order doesn't matter)
  */
 function checkRequiredTiles(
@@ -333,9 +359,9 @@ export function validateSolutionWithConstraints(
   let constraintError: string | undefined
 
   if (constraints.requirementType === 'REQUIRED_SUBSEQUENCE') {
-    const result = checkRequiredSubsequence(
+    const result = checkRequiredSubsequences(
       executedMoves,
-      constraints.requiredSolutionSubsequence ?? [],
+      constraints.requiredSolutionSubsequences ?? [],
     )
     constraintsSatisfied = result.satisfied
     constraintError = result.error

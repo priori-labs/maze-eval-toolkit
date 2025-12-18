@@ -83,11 +83,12 @@ export interface GeneratedMaze {
   goal: Position
   shortestPath: number
   generatedAt: string
-  // Constraint fields (optional for backward compatibility)
+  // Constraint fields
   requirementType?: RequirementType
-  requiredSolutionSubsequence?: RequiredMove[]
+  requiredSolutionSubsequences?: RequiredMove[][] // Multiple paths (OR logic)
   requiredTiles?: Position[]
   specialInstructions?: string
+  shortestPathPlaythrough?: RequiredMove[] // Manually recorded optimal path
 }
 
 /**

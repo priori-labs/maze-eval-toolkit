@@ -193,7 +193,7 @@ export default function InteractiveMaze({
             moves,
             {
               requirementType: maze.requirementType,
-              requiredSolutionSubsequence: maze.requiredSolutionSubsequence,
+              requiredSolutionSubsequences: maze.requiredSolutionSubsequences,
               requiredTiles: maze.requiredTiles,
             },
           )

@@ -35,9 +35,10 @@ interface InputMaze {
   start: Position
   goal: Position
   requirementType: RequirementType
-  requiredSolutionSubsequence?: RequiredMove[]
+  requiredSolutionSubsequences?: RequiredMove[][] // Multiple paths (OR logic)
   requiredTiles?: Position[]
   specialInstructions?: string
+  shortestPathPlaythrough?: RequiredMove[] // Manually recorded optimal path
 }
 
 interface ImportOptions {
@@ -74,9 +75,10 @@ function processInputMaze(inputMaze: InputMaze): GeneratedMaze {
     generatedAt: new Date().toISOString(),
     // Constraint fields
     requirementType: inputMaze.requirementType,
-    requiredSolutionSubsequence: inputMaze.requiredSolutionSubsequence,
+    requiredSolutionSubsequences: inputMaze.requiredSolutionSubsequences,
     requiredTiles: inputMaze.requiredTiles,
     specialInstructions: inputMaze.specialInstructions,
+    shortestPathPlaythrough: inputMaze.shortestPathPlaythrough,
   }
 }
 
@@ -160,11 +162,13 @@ async function runImport(options: ImportOptions) {
       // Log constraint info
       let constraintInfo = ''
       if (maze.requirementType === 'REQUIRED_SUBSEQUENCE') {
-        constraintInfo = chalk.cyan(
-          ` [SUBSEQUENCE: ${maze.requiredSolutionSubsequence?.length ?? 0} moves]`,
-        )
+        const pathCount = maze.requiredSolutionSubsequences?.length ?? 0
+        constraintInfo = chalk.cyan(` [SUBSEQUENCE: ${pathCount} path(s)]`)
       } else if (maze.requirementType === 'REQUIRED_TILES') {
         constraintInfo = chalk.cyan(` [TILES: ${maze.requiredTiles?.length ?? 0} required]`)
+      }
+      if (maze.shortestPathPlaythrough?.length) {
+        constraintInfo += chalk.yellow(` [SHORTEST: ${maze.shortestPathPlaythrough.length} moves]`)
       }
 
       console.log(
