@@ -422,7 +422,7 @@ export default function InteractiveMaze({
       <div className="mt-4 text-[14px] text-muted-foreground font-mono h-5 flex items-center justify-center">
         {!isObfuscated && !hasReachedGoal && (
           <>
-            <span className="text-foreground">←↑↓→</span> move
+            <span className="text-foreground mr-1">←↑↓→</span> move
           </>
         )}
         {hasReachedGoal && !constraintError && (

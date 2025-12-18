@@ -150,11 +150,11 @@ export default function App() {
     }
   }, [])
 
-  // Quick run - load random maze from test-set-mini.json
+  // Quick run - load random maze from simple-test.json
   const handleQuickRun = useCallback(async () => {
     try {
-      const response = await fetch('/api/data/test-set-mini.json')
-      if (!response.ok) throw new Error('Failed to fetch test-set-mini.json')
+      const response = await fetch('/api/data/simple-test.json')
+      if (!response.ok) throw new Error('Failed to fetch simple-test.json')
       const data = (await response.json()) as TestSetFile
 
       setQuickRunFullTestSet(data)
