@@ -6,7 +6,7 @@ dist/
 *.tsbuildinfo
 
 # Generated data
-data/
+test-sets/
 results/
 
 # Input data
