@@ -2,18 +2,19 @@
  * CLI command for generating test sets
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { ExitPromptError } from '@inquirer/core'
-import { checkbox, confirm, input } from '@inquirer/prompts'
+import { checkbox, confirm, input, select } from '@inquirer/prompts'
 import chalk from 'chalk'
 import { Command } from 'commander'
 import { v4 as uuidv4 } from 'uuid'
-import { generateMaze } from '../core/maze-generator'
+import { type GenerationOptions, generateMaze } from '../core/maze-generator'
 import { generateAllPrompts } from '../core/maze-renderer'
 import {
   DIFFICULTIES,
   type Difficulty,
+  type GenerationMode,
   type MazeWithPrompts,
   type TestSetFile,
 } from '../core/types'
@@ -23,6 +24,9 @@ interface GenerateOptions {
   difficulties: Difficulty[]
   outputPath: string
   name: string
+  mode: GenerationMode
+  fillRemaining?: boolean
+  minShortestPath?: number
 }
 
 async function promptForOptions(): Promise<GenerateOptions> {
@@ -52,14 +56,61 @@ async function promptForOptions(): Promise<GenerateOptions> {
     required: true,
   })) as Difficulty[]
 
-  const outputPath = await input({
+  const mode = (await select({
+    message: 'Generation algorithm:',
+    choices: [
+      {
+        name: 'Standard DFS (random exploration)',
+        value: 'dfs',
+      },
+      {
+        name: 'Spine-First (main path + dead-ends)',
+        value: 'spine-first',
+      },
+    ],
+    default: 'dfs',
+  })) as GenerationMode
+
+  // Spine-first specific options
+  let fillRemaining: boolean | undefined
+  let minShortestPath: number | undefined
+
+  if (mode === 'spine-first') {
+    fillRemaining = await confirm({
+      message: 'Enable fill-in? (fills boxed-in areas with passages)',
+      default: false,
+    })
+
+    const minPathStr = await input({
+      message: 'Minimum shortest path length:',
+      default: '100',
+      validate: (value) => {
+        const num = Number.parseInt(value, 10)
+        if (Number.isNaN(num) || num < 1) return 'Please enter a positive number'
+        return true
+      },
+    })
+    minShortestPath = Number.parseInt(minPathStr, 10)
+  }
+
+  // Output path with file existence check
+  let outputPath = await input({
     message: 'Output file path:',
     default: './test-sets/test-set.json',
   })
 
+  while (existsSync(outputPath)) {
+    console.log(chalk.yellow(`File already exists: ${outputPath}`))
+    outputPath = await input({
+      message: 'Enter a different file path:',
+      default: outputPath.replace('.json', '-new.json'),
+    })
+  }
+
   console.log()
+  const modeLabel = mode === 'spine-first' ? 'spine-first' : 'DFS'
   const confirmed = await confirm({
-    message: `Generate ${count} mazes for ${difficulties.length} difficulties (${count * difficulties.length} total)?`,
+    message: `Generate ${count} ${modeLabel} mazes for ${difficulties.length} difficulties (${count * difficulties.length} total)?`,
     default: true,
   })
 
@@ -68,14 +119,30 @@ async function promptForOptions(): Promise<GenerateOptions> {
     process.exit(0)
   }
 
-  return { count, difficulties, outputPath, name }
+  return { count, difficulties, outputPath, name, mode, fillRemaining, minShortestPath }
 }
 
 async function runGeneration(options: GenerateOptions) {
-  const { count, difficulties, outputPath, name } = options
+  const { count, difficulties, outputPath, name, mode, fillRemaining, minShortestPath } = options
+
+  // Build generation options for the core generator
+  const generationOptions: GenerationOptions | undefined =
+    mode === 'spine-first'
+      ? {
+          mode: 'spine-first',
+          spineFirst: {
+            fillRemaining,
+          },
+          minShortestPath,
+        }
+      : undefined
 
   console.log()
-  console.log(chalk.bold('Generating mazes...'))
+  console.log(
+    chalk.bold(
+      `Generating mazes using ${mode === 'spine-first' ? 'spine-first' : 'DFS'} algorithm...`,
+    ),
+  )
   console.log(chalk.dim('─'.repeat(40)))
 
   const testSet: TestSetFile = {
@@ -113,7 +180,7 @@ async function runGeneration(options: GenerateOptions) {
     for (let i = 0; i < count; i++) {
       process.stdout.write(`  [${i + 1}/${count}]`)
 
-      const maze = generateMaze(difficulty)
+      const maze = generateMaze(difficulty, 2500, generationOptions)
       if (!maze) {
         console.log(chalk.yellow(' - Failed to generate valid maze (max attempts reached)'))
         continue
@@ -169,6 +236,7 @@ export const generateCommand = new Command('generate')
   .option('-d, --difficulties <list>', 'Comma-separated list of difficulties')
   .option('-o, --output <path>', 'Output JSON file path')
   .option('--name <name>', 'Test set name')
+  .option('-m, --mode <mode>', 'Generation mode: dfs or spine-first', 'dfs')
   .option('-i, --interactive', 'Run in interactive mode (default if no options provided)')
   .action(async (options) => {
     // Determine if we should run interactive mode
@@ -195,6 +263,7 @@ export const generateCommand = new Command('generate')
         : DIFFICULTIES
       const outputPath = options.output || './test-sets/test-set.json'
       const name = options.name || 'LMIQ Test Set'
+      const mode = (options.mode || 'dfs') as GenerationMode
 
       // Validate difficulties
       for (const d of difficulties) {
@@ -205,10 +274,18 @@ export const generateCommand = new Command('generate')
         }
       }
 
-      genOptions = { count, difficulties, outputPath, name }
+      // Validate mode
+      if (mode !== 'dfs' && mode !== 'spine-first') {
+        console.error(chalk.red(`Invalid mode: ${mode}`))
+        console.error('Valid modes: dfs, spine-first')
+        process.exit(1)
+      }
+
+      genOptions = { count, difficulties, outputPath, name, mode }
 
       console.log(chalk.bold('\nLMIQ Test Set Generator'))
       console.log(chalk.dim('─'.repeat(40)))
+      console.log(`Mode: ${mode}`)
       console.log(`Difficulties: ${difficulties.join(', ')}`)
       console.log(`Mazes per difficulty: ${count}`)
       console.log(`Output: ${outputPath}`)

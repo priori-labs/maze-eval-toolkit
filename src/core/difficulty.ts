@@ -2,7 +2,7 @@
  * Difficulty level configurations
  */
 
-import type { Difficulty, DifficultyConfig } from './types'
+import type { Difficulty, DifficultyConfig, SpineFirstConfig } from './types'
 
 /**
  * Settings for each difficulty level
@@ -80,4 +80,88 @@ export function getDifficultyConfig(difficulty: Difficulty): DifficultyConfig {
  */
 export function randomDimension(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min
+}
+
+/**
+ * Default spine-first configuration for each difficulty level
+ *
+ * - branchChance: Higher = more dead-ends to navigate around
+ * - maxBranchLength: Longer = more doubt before hitting dead-end
+ * - tortuosity: Higher = more winding main path
+ * - minTurns: Ensures path isn't too direct
+ */
+export const SPINE_FIRST_DEFAULTS: Record<Difficulty, SpineFirstConfig> = {
+  simple: {
+    branchChance: 0.3,
+    minBranchLength: 1,
+    maxBranchLength: 2,
+    tortuosity: 1.2,
+    minTurns: 2,
+    minBranchSpacing: 5,
+    subBranchChance: 0,
+    fillRemaining: false,
+  },
+  easy: {
+    branchChance: 0.4,
+    minBranchLength: 2,
+    maxBranchLength: 4,
+    tortuosity: 1.3,
+    minTurns: 3,
+    minBranchSpacing: 6,
+    subBranchChance: 0.1,
+    fillRemaining: false,
+  },
+  medium: {
+    branchChance: 0.5,
+    minBranchLength: 3,
+    maxBranchLength: 6,
+    tortuosity: 1.5,
+    minTurns: 5,
+    minBranchSpacing: 8,
+    subBranchChance: 0.15,
+    fillRemaining: false,
+  },
+  hard: {
+    branchChance: 0.6,
+    minBranchLength: 4,
+    maxBranchLength: 10,
+    tortuosity: 1.7,
+    minTurns: 8,
+    minBranchSpacing: 10,
+    subBranchChance: 0.2,
+    fillRemaining: false,
+  },
+  nightmare: {
+    branchChance: 0.7,
+    minBranchLength: 5,
+    maxBranchLength: 20,
+    tortuosity: 2.0,
+    minTurns: 12,
+    minBranchSpacing: 12,
+    subBranchChance: 0.25,
+    fillRemaining: false,
+  },
+  horror: {
+    branchChance: 0.8,
+    minBranchLength: 5,
+    maxBranchLength: 50,
+    tortuosity: 2.5,
+    minTurns: 20,
+    minBranchSpacing: 15,
+    subBranchChance: 0.3,
+    fillRemaining: false,
+  },
+}
+
+/**
+ * Get spine-first configuration for a difficulty level with optional overrides
+ */
+export function getSpineFirstConfig(
+  difficulty: Difficulty,
+  overrides?: Partial<SpineFirstConfig>,
+): SpineFirstConfig {
+  return {
+    ...SPINE_FIRST_DEFAULTS[difficulty],
+    ...overrides,
+  }
 }

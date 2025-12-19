@@ -33,6 +33,7 @@ interface EvaluateOptions {
   outputPath: string
   limit: number | null
   apiKey: string
+  saveToDb: boolean
 }
 
 // Common models for quick selection
@@ -112,6 +113,7 @@ async function promptForOptions(): Promise<EvaluateOptions> {
       checked: f === 'ascii' || f === 'adjacency',
     })),
     required: true,
+    pageSize: PROMPT_FORMATS.length,
   })) as PromptFormat[]
 
   // Concurrency
@@ -126,11 +128,20 @@ async function promptForOptions(): Promise<EvaluateOptions> {
   })
   const concurrency = Number.parseInt(concurrencyStr, 10)
 
-  // Output path
-  const outputPath = await input({
-    message: 'Output database path:',
-    default: './results/eval.db',
+  // Save to database?
+  const saveToDb = await confirm({
+    message: 'Save results to database?',
+    default: true,
   })
+
+  // Output path (only ask if saving to DB)
+  let outputPath = './results/eval.db'
+  if (saveToDb) {
+    outputPath = await input({
+      message: 'Output database path:',
+      default: './results/eval.db',
+    })
+  }
 
   // Load test set to show summary
   const content = readFileSync(testSetPath, 'utf-8')
@@ -143,7 +154,10 @@ async function promptForOptions(): Promise<EvaluateOptions> {
   console.log(`  Model: ${model}`)
   console.log(`  Formats: ${formats.join(', ')}`)
   console.log(`  Concurrency: ${concurrency}`)
-  console.log(`  Output: ${outputPath}`)
+  console.log(`  Save to DB: ${saveToDb ? 'Yes' : 'No'}`)
+  if (saveToDb) {
+    console.log(`  Output: ${outputPath}`)
+  }
   console.log()
 
   const confirmed = await confirm({
@@ -164,11 +178,21 @@ async function promptForOptions(): Promise<EvaluateOptions> {
     outputPath,
     limit: null,
     apiKey,
+    saveToDb,
   }
 }
 
 async function runEvaluation(options: EvaluateOptions) {
-  const { testSetPath, model, formats, concurrency, outputPath, limit: limitArg, apiKey } = options
+  const {
+    testSetPath,
+    model,
+    formats,
+    concurrency,
+    outputPath,
+    limit: limitArg,
+    apiKey,
+    saveToDb,
+  } = options
 
   // Load test set
   console.log('\nLoading test set...')
@@ -205,8 +229,8 @@ async function runEvaluation(options: EvaluateOptions) {
   console.log(`Mazes to evaluate: ${evaluationList.length}`)
   console.log()
 
-  // Initialize database
-  const db = initDatabase(outputPath)
+  // Initialize database (only if saving)
+  const db = saveToDb ? initDatabase(outputPath) : null
 
   // Generate unique run ID for this evaluation batch
   const runId = uuidv4()
@@ -253,6 +277,7 @@ async function runEvaluation(options: EvaluateOptions) {
   let constraintViolations = 0
   let noPathFound = 0
   let totalCost = 0
+  let totalInferenceTime = 0
   const startTime = Date.now()
 
   // Evaluate each maze
@@ -367,13 +392,16 @@ async function runEvaluation(options: EvaluateOptions) {
           efficiency: validation?.efficiency ?? null,
         })
 
-        // Track cost
+        // Track cost and inference time
         if (response.stats.costUsd !== null) {
           totalCost += response.stats.costUsd
         }
+        totalInferenceTime += response.stats.inferenceTimeMs
 
-        // Insert into database and increment counter
-        insertEvaluation(db, result)
+        // Insert into database (if saving) and increment counter
+        if (db) {
+          insertEvaluation(db, result)
+        }
         completed++
 
         // Log result
@@ -441,15 +469,19 @@ async function runEvaluation(options: EvaluateOptions) {
 
         apiErrors++
 
-        // Insert into database and increment counter
-        insertEvaluation(db, result)
+        // Track inference time for errors too
+        const errorInferenceTime = Date.now() - new Date(startedAt).getTime()
+        totalInferenceTime += errorInferenceTime
+
+        // Insert into database (if saving) and increment counter
+        if (db) {
+          insertEvaluation(db, result)
+        }
         completed++
 
         // Log error
         const prefix = `[${String(completed).padStart(totalStr.length)}/${totalStr}]`
-        const errTimeStr = `${((Date.now() - new Date(startedAt).getTime()) / 1000).toFixed(
-          1,
-        )}s`.padStart(7)
+        const errTimeStr = `${(errorInferenceTime / 1000).toFixed(1)}s`.padStart(7)
         log(
           `${prefix} ${difficulty.padEnd(10)} ${errTimeStr}  ${'-'.padStart(
             8,
@@ -464,8 +496,10 @@ async function runEvaluation(options: EvaluateOptions) {
   // Wait for all evaluations
   await Promise.all(evaluationPromises)
 
-  // Close database
-  closeDatabase()
+  // Close database (if saving)
+  if (db) {
+    closeDatabase()
+  }
 
   // Print summary
   const totalTime = Date.now() - startTime
@@ -485,9 +519,12 @@ async function runEvaluation(options: EvaluateOptions) {
   log(`Token Limits: ${chalk.yellow(tokenLimits)}`)
   log(`API Errors: ${chalk.red(apiErrors)}`)
   log(`Total Time: ${formatDuration(totalTime / 1000)}`)
+  log(`Total Inference Time: ${formatDuration(totalInferenceTime / 1000)}`)
   log(`Total Cost: ${chalk.cyan(`$${totalCost.toFixed(4)}`)}`)
   log('')
-  log(`Results saved to: ${chalk.cyan(outputPath)}`)
+  if (db) {
+    log(`Results saved to: ${chalk.cyan(outputPath)}`)
+  }
   log(`Log saved to: ${chalk.cyan(logPath)}`)
 }
 
@@ -600,5 +637,6 @@ export const evaluateCommand = new Command('evaluate')
       outputPath,
       limit: limitArg,
       apiKey: apiKey!,
+      saveToDb: true, // Always save in non-interactive mode
     })
   })

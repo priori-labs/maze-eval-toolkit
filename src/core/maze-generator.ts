@@ -6,9 +6,29 @@
  */
 
 import { v4 as uuidv4 } from 'uuid'
-import { getDifficultyConfig, randomDimension } from './difficulty'
+import { getDifficultyConfig, getSpineFirstConfig, randomDimension } from './difficulty'
 import { solveMaze } from './maze-solver'
-import type { Cell, Difficulty, GeneratedMaze, Position } from './types'
+import { generateSpineFirstMaze } from './spine-first-generator'
+import type {
+  Cell,
+  Difficulty,
+  GeneratedMaze,
+  GenerationMode,
+  Position,
+  SpineFirstConfig,
+} from './types'
+
+/**
+ * Options for maze generation
+ */
+export interface GenerationOptions {
+  /** Generation algorithm mode (default: 'dfs') */
+  mode?: GenerationMode
+  /** Configuration for spine-first mode (uses difficulty defaults if not provided) */
+  spineFirst?: Partial<SpineFirstConfig>
+  /** Override minimum shortest path (uses difficulty default if not provided) */
+  minShortestPath?: number
+}
 
 /**
  * Internal cell type used during generation (includes visited flag)
@@ -150,21 +170,39 @@ function generateMazeGrid(width: number, height: number, extraPaths: number): Ge
 }
 
 /**
- * Place start and goal positions on the maze edges
+ * Place start and goal positions in opposite corners of the maze
+ * Randomly selects between diagonal pairs and swaps start/goal for variety
  */
 function placeStartAndGoal(width: number, height: number): { start: Position; goal: Position } {
-  // Start in top-left quadrant
-  const startX = Math.floor(Math.random() * Math.ceil(width / 3))
-  const startY = Math.floor(Math.random() * Math.ceil(height / 3))
+  const thirdWidth = Math.ceil(width / 3)
+  const thirdHeight = Math.ceil(height / 3)
 
-  // Goal in bottom-right quadrant
-  const goalX = width - 1 - Math.floor(Math.random() * Math.ceil(width / 3))
-  const goalY = height - 1 - Math.floor(Math.random() * Math.ceil(height / 3))
-
-  return {
-    start: { x: startX, y: startY },
-    goal: { x: goalX, y: goalY },
+  // Define the four corner quadrants
+  const topLeft: Position = {
+    x: Math.floor(Math.random() * thirdWidth),
+    y: Math.floor(Math.random() * thirdHeight),
   }
+  const topRight: Position = {
+    x: width - 1 - Math.floor(Math.random() * thirdWidth),
+    y: Math.floor(Math.random() * thirdHeight),
+  }
+  const bottomLeft: Position = {
+    x: Math.floor(Math.random() * thirdWidth),
+    y: height - 1 - Math.floor(Math.random() * thirdHeight),
+  }
+  const bottomRight: Position = {
+    x: width - 1 - Math.floor(Math.random() * thirdWidth),
+    y: height - 1 - Math.floor(Math.random() * thirdHeight),
+  }
+
+  // Randomly select diagonal pair: (top-left, bottom-right) or (bottom-left, top-right)
+  const useTLBR = Math.random() < 0.5
+  const [cornerA, cornerB] = useTLBR ? [topLeft, bottomRight] : [bottomLeft, topRight]
+
+  // Randomly swap which corner is start vs goal
+  const swapStartGoal = Math.random() < 0.5
+
+  return swapStartGoal ? { start: cornerB, goal: cornerA } : { start: cornerA, goal: cornerB }
 }
 
 /**
@@ -185,30 +223,47 @@ function toOutputGrid(grid: GenerationCell[][]): Cell[][] {
  *
  * @param difficulty - The difficulty level
  * @param maxAttempts - Maximum attempts to meet minShortestPath requirement
+ * @param options - Optional generation options (mode, spine-first config)
  * @returns Generated maze or null if unable to meet requirements
  */
-export function generateMaze(difficulty: Difficulty, maxAttempts = 2500): GeneratedMaze | null {
+export function generateMaze(
+  difficulty: Difficulty,
+  maxAttempts = 2500,
+  options?: GenerationOptions,
+): GeneratedMaze | null {
   const config = getDifficultyConfig(difficulty)
+  const mode = options?.mode ?? 'dfs'
+  const minShortestPath = options?.minShortestPath ?? config.minShortestPath
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     // Random dimensions within range
     const width = randomDimension(config.minWidth, config.maxWidth)
     const height = randomDimension(config.minHeight, config.maxHeight)
 
-    // Generate maze grid
-    const grid = generateMazeGrid(width, height, config.extraPaths)
-
-    // Place start and goal
+    // Place start and goal (needed before spine-first generation)
     const { start, goal } = placeStartAndGoal(width, height)
 
-    // Convert to output format
-    const outputGrid = toOutputGrid(grid)
+    let outputGrid: Cell[][]
+
+    if (mode === 'spine-first') {
+      // Use spine-first algorithm with merged config
+      const spineConfig = getSpineFirstConfig(difficulty, options?.spineFirst)
+      const result = generateSpineFirstMaze(width, height, start, goal, spineConfig)
+      if (!result) {
+        continue // Failed to generate valid spine, retry
+      }
+      outputGrid = result
+    } else {
+      // Use default DFS algorithm
+      const grid = generateMazeGrid(width, height, config.extraPaths)
+      outputGrid = toOutputGrid(grid)
+    }
 
     // Calculate shortest path
     const stats = solveMaze(outputGrid, start, goal)
 
     // Check if maze meets requirements
-    if (stats.shortestPath >= config.minShortestPath && stats.shortestPath !== -1) {
+    if (stats.shortestPath >= minShortestPath && stats.shortestPath !== -1) {
       return {
         id: uuidv4(),
         difficulty,
@@ -233,17 +288,19 @@ export function generateMaze(difficulty: Difficulty, maxAttempts = 2500): Genera
  * @param difficulty - The difficulty level
  * @param count - Number of mazes to generate
  * @param onProgress - Optional callback for progress updates
+ * @param options - Optional generation options (mode, spine-first config)
  * @returns Array of generated mazes
  */
 export function generateMazes(
   difficulty: Difficulty,
   count: number,
   onProgress?: (current: number, total: number) => void,
+  options?: GenerationOptions,
 ): GeneratedMaze[] {
   const mazes: GeneratedMaze[] = []
 
   for (let i = 0; i < count; i++) {
-    const maze = generateMaze(difficulty)
+    const maze = generateMaze(difficulty, 2500, options)
     if (maze) {
       mazes.push(maze)
     }

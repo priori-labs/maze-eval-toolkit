@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { Difficulty, EvaluationResult, TestSetFile } from '../core/types'
+import type { Difficulty, EvaluationResult, MazeWithPrompts, TestSetFile } from '../core/types'
 import { DIFFICULTIES } from '../core/types'
 import HumanEval from './components/HumanEval'
 import HumanEvalSetup from './components/HumanEvalSetup'
@@ -18,6 +18,13 @@ import {
 
 type AppMode = 'viewer' | 'human-eval-setup' | 'human-eval'
 
+// Flattened maze entry for quick run navigation
+interface QuickRunMazeEntry {
+  difficulty: Difficulty
+  index: number
+  maze: MazeWithPrompts
+}
+
 export default function App() {
   // App mode
   const [mode, setMode] = useState<AppMode>('viewer')
@@ -28,6 +35,8 @@ export default function App() {
   const [skipReadyScreen, setSkipReadyScreen] = useState(false)
   const [isQuickRunMode, setIsQuickRunMode] = useState(false)
   const [quickRunFullTestSet, setQuickRunFullTestSet] = useState<TestSetFile | null>(null)
+  const [quickRunAllMazes, setQuickRunAllMazes] = useState<QuickRunMazeEntry[]>([])
+  const [quickRunIndex, setQuickRunIndex] = useState(0)
 
   // Viewer state
   const [testSet, setTestSet] = useState<TestSetFile | null>(null)
@@ -72,7 +81,9 @@ export default function App() {
       if (!response.ok) throw new Error('Failed to fetch')
       const data = (await response.json()) as TestSetFile
       setTestSet(data)
-      setCurrentDifficulty('simple')
+      // Auto-select first difficulty that has mazes
+      const firstDifficultyWithMazes = DIFFICULTIES.find((d) => (data.mazes[d]?.length ?? 0) > 0)
+      setCurrentDifficulty(firstDifficultyWithMazes ?? 'simple')
       setCurrentIndex(0)
       setSelectedResult(null)
     } catch (err) {
@@ -118,63 +129,97 @@ export default function App() {
     setMode('human-eval')
   }, [])
 
-  // Helper to pick a random maze from a test set
-  const pickRandomMaze = useCallback((data: TestSetFile): TestSetFile => {
-    const allMazes = DIFFICULTIES.flatMap((d) => data.mazes[d] ?? [])
-    if (allMazes.length === 0) throw new Error('No mazes found in test set')
-
-    const randomMaze = allMazes[Math.floor(Math.random() * allMazes.length)]!
-
-    return {
-      ...data,
-      name: 'Quick Run',
-      mazes: {
-        simple: [],
-        easy: [],
-        medium: [],
-        hard: [],
-        nightmare: [],
-        horror: [],
-        [randomMaze.difficulty]: [randomMaze],
-      },
-      summary: {
-        totalMazes: 1,
-        byDifficulty: {
-          simple: 0,
-          easy: 0,
-          medium: 0,
-          hard: 0,
-          nightmare: 0,
-          horror: 0,
-          [randomMaze.difficulty]: 1,
+  // Helper to create a TestSetFile with a single maze
+  const createSingleMazeTestSet = useCallback(
+    (data: TestSetFile, maze: MazeWithPrompts): TestSetFile => {
+      return {
+        ...data,
+        name: 'Quick Run',
+        mazes: {
+          simple: [],
+          easy: [],
+          medium: [],
+          hard: [],
+          nightmare: [],
+          horror: [],
+          [maze.difficulty]: [maze],
         },
-      },
+        summary: {
+          totalMazes: 1,
+          byDifficulty: {
+            simple: 0,
+            easy: 0,
+            medium: 0,
+            hard: 0,
+            nightmare: 0,
+            horror: 0,
+            [maze.difficulty]: 1,
+          },
+        },
+      }
+    },
+    [],
+  )
+
+  // Helper to flatten test set into ordered maze list
+  const flattenTestSet = useCallback((data: TestSetFile): QuickRunMazeEntry[] => {
+    const entries: QuickRunMazeEntry[] = []
+    for (const difficulty of DIFFICULTIES) {
+      const mazes = data.mazes[difficulty] ?? []
+      mazes.forEach((maze, index) => {
+        entries.push({ difficulty, index, maze })
+      })
     }
+    return entries
   }, [])
 
-  // Quick run - load random maze from simple-test.json
-  const handleQuickRun = useCallback(async () => {
-    try {
-      const response = await fetch('/api/data/simple-test.json')
-      if (!response.ok) throw new Error('Failed to fetch simple-test.json')
-      const data = (await response.json()) as TestSetFile
+  // Quick run - load random maze from selected test set
+  const handleQuickRun = useCallback(
+    async (filename: string) => {
+      try {
+        const response = await fetch(`/api/data/${filename}`)
+        if (!response.ok) throw new Error(`Failed to fetch ${filename}`)
+        const data = (await response.json()) as TestSetFile
 
-      setQuickRunFullTestSet(data)
-      setHumanEvalRunName('Quick Run')
-      setHumanEvalTestSet(pickRandomMaze(data))
-      setSkipReadyScreen(true)
-      setIsQuickRunMode(true)
-      setMode('human-eval')
-    } catch (err) {
-      alert(`Quick Run failed: ${err}`)
-    }
-  }, [pickRandomMaze])
+        // Build flattened maze list
+        const allMazes = flattenTestSet(data)
+        if (allMazes.length === 0) throw new Error('No mazes found in test set')
 
-  // Quick run next - load another random maze
+        // Start at the first maze
+        const startEntry = allMazes[0]!
+
+        setQuickRunFullTestSet(data)
+        setQuickRunAllMazes(allMazes)
+        setQuickRunIndex(0)
+        setHumanEvalRunName('Quick Run')
+        setHumanEvalTestSet(createSingleMazeTestSet(data, startEntry.maze))
+        setSkipReadyScreen(true)
+        setIsQuickRunMode(true)
+        setMode('human-eval')
+      } catch (err) {
+        alert(`Quick Run failed: ${err}`)
+      }
+    },
+    [flattenTestSet, createSingleMazeTestSet],
+  )
+
+  // Quick run navigation - go to next maze
   const handleQuickRunNext = useCallback(() => {
-    if (!quickRunFullTestSet) return
-    setHumanEvalTestSet(pickRandomMaze(quickRunFullTestSet))
-  }, [quickRunFullTestSet, pickRandomMaze])
+    if (!quickRunFullTestSet || quickRunAllMazes.length === 0) return
+    const nextIndex = (quickRunIndex + 1) % quickRunAllMazes.length
+    const entry = quickRunAllMazes[nextIndex]!
+    setQuickRunIndex(nextIndex)
+    setHumanEvalTestSet(createSingleMazeTestSet(quickRunFullTestSet, entry.maze))
+  }, [quickRunFullTestSet, quickRunAllMazes, quickRunIndex, createSingleMazeTestSet])
+
+  // Quick run navigation - go to previous maze
+  const handleQuickRunPrev = useCallback(() => {
+    if (!quickRunFullTestSet || quickRunAllMazes.length === 0) return
+    const prevIndex = (quickRunIndex - 1 + quickRunAllMazes.length) % quickRunAllMazes.length
+    const entry = quickRunAllMazes[prevIndex]!
+    setQuickRunIndex(prevIndex)
+    setHumanEvalTestSet(createSingleMazeTestSet(quickRunFullTestSet, entry.maze))
+  }, [quickRunFullTestSet, quickRunAllMazes, quickRunIndex, createSingleMazeTestSet])
 
   const handleHumanEvalComplete = useCallback(() => {
     setMode('viewer')
@@ -183,6 +228,8 @@ export default function App() {
     setSkipReadyScreen(false)
     setIsQuickRunMode(false)
     setQuickRunFullTestSet(null)
+    setQuickRunAllMazes([])
+    setQuickRunIndex(0)
   }, [])
 
   return (
@@ -201,8 +248,36 @@ export default function App() {
           {mode === 'viewer' && (
             <div className="flex items-center gap-4">
               <Button onClick={() => setMode('human-eval-setup')}>Human Eval</Button>
-              <Button variant="outline" onClick={handleQuickRun}>
-                Quick Run
+              <Select onValueChange={handleQuickRun}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Quick Run..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {dataFiles.length === 0 ? (
+                    <SelectItem value="_none" disabled>
+                      No test sets found
+                    </SelectItem>
+                  ) : (
+                    dataFiles.map((file) => (
+                      <SelectItem key={file} value={file}>
+                        {file.replace('.json', '')}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {mode === 'human-eval' && isQuickRunMode && quickRunAllMazes.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={handleQuickRunPrev}>
+                ← Prev
+              </Button>
+              <span className="text-sm text-muted-foreground px-2">
+                {quickRunIndex + 1} / {quickRunAllMazes.length}
+              </span>
+              <Button variant="outline" size="sm" onClick={handleQuickRunNext}>
+                Next →
               </Button>
             </div>
           )}

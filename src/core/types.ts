@@ -261,3 +261,33 @@ export function keyToPos(key: string): Position {
   const [x, y] = key.split(',').map(Number)
   return { x: x!, y: y! }
 }
+
+/**
+ * Maze generation algorithm mode
+ */
+export type GenerationMode = 'dfs' | 'spine-first'
+
+/**
+ * Configuration for spine-first maze generation
+ *
+ * This algorithm creates a guaranteed main path (spine/artery) from start to goal,
+ * then adds controlled dead-end branches (capillaries) to create local decision points.
+ */
+export interface SpineFirstConfig {
+  /** Probability (0-1) of starting a branch at each spine cell */
+  branchChance: number
+  /** Minimum depth of dead-end branches (for random range) */
+  minBranchLength?: number
+  /** Maximum depth of dead-end branches */
+  maxBranchLength: number
+  /** Minimum spine length multiplier over Manhattan distance (1.0 = direct path allowed) */
+  tortuosity: number
+  /** Minimum number of turns in the spine path (optional) */
+  minTurns?: number
+  /** Minimum number of spine cells between branch points */
+  minBranchSpacing?: number
+  /** Probability (0-1) that a branch cell spawns its own sub-branch */
+  subBranchChance?: number
+  /** Whether to fill remaining unvisited areas with DFS passages */
+  fillRemaining?: boolean
+}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { validateSolutionWithConstraints } from '../../core/maze-solver'
 import type { Difficulty, MazeWithPrompts, MoveAction, Position } from '../../core/types'
 
-const CELL_SIZE = 36
+const DEFAULT_CELL_SIZE = 36
 const WALL_WIDTH = 2
 const PLAYER_COLOR = '#ffffff' // white
 const PLAYER_GLOW = '#e2e8f0'
@@ -35,6 +35,7 @@ interface InteractiveMazeProps {
   showPath?: boolean // Show blue path highlight (disabled for human eval, enabled for AI replay)
   startImmediately?: boolean // Start timer immediately without waiting for reveal
   onStatsChange?: (stats: { moves: number; elapsedMs: number }) => void
+  cellSize?: number // Size of each cell in pixels (default: 36)
 }
 
 export default function InteractiveMaze({
@@ -45,6 +46,7 @@ export default function InteractiveMaze({
   showPath = false,
   startImmediately = false,
   onStatsChange,
+  cellSize = DEFAULT_CELL_SIZE,
 }: InteractiveMazeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -66,8 +68,8 @@ export default function InteractiveMaze({
   const [constraintError, setConstraintError] = useState<string | null>(null)
 
   // Calculate canvas size
-  const canvasWidth = maze.width * CELL_SIZE + WALL_WIDTH
-  const canvasHeight = maze.height * CELL_SIZE + WALL_WIDTH
+  const canvasWidth = maze.width * cellSize + WALL_WIDTH
+  const canvasHeight = maze.height * cellSize + WALL_WIDTH
 
   // Reset state when maze changes
   useEffect(() => {
@@ -285,10 +287,10 @@ export default function InteractiveMaze({
       for (let y = 0; y < maze.height; y++) {
         for (let x = 0; x < maze.width; x++) {
           if (pathSet.has(`${x},${y}`)) {
-            const cx = x * CELL_SIZE + WALL_WIDTH / 2
-            const cy = y * CELL_SIZE + WALL_WIDTH / 2
+            const cx = x * cellSize + WALL_WIDTH / 2
+            const cy = y * cellSize + WALL_WIDTH / 2
             ctx.fillStyle = PATH_COLOR
-            ctx.fillRect(cx, cy, CELL_SIZE, CELL_SIZE)
+            ctx.fillRect(cx, cy, cellSize, cellSize)
           }
         }
       }
@@ -305,40 +307,40 @@ export default function InteractiveMaze({
         const cell = maze.grid[y]?.[x]
         if (!cell) continue
 
-        const cx = x * CELL_SIZE + WALL_WIDTH / 2
-        const cy = y * CELL_SIZE + WALL_WIDTH / 2
+        const cx = x * cellSize + WALL_WIDTH / 2
+        const cy = y * cellSize + WALL_WIDTH / 2
 
         if (cell.walls.top) {
           ctx.beginPath()
           ctx.moveTo(cx, cy)
-          ctx.lineTo(cx + CELL_SIZE, cy)
+          ctx.lineTo(cx + cellSize, cy)
           ctx.stroke()
         }
         if (cell.walls.right) {
           ctx.beginPath()
-          ctx.moveTo(cx + CELL_SIZE, cy)
-          ctx.lineTo(cx + CELL_SIZE, cy + CELL_SIZE)
+          ctx.moveTo(cx + cellSize, cy)
+          ctx.lineTo(cx + cellSize, cy + cellSize)
           ctx.stroke()
         }
         if (cell.walls.bottom) {
           ctx.beginPath()
-          ctx.moveTo(cx, cy + CELL_SIZE)
-          ctx.lineTo(cx + CELL_SIZE, cy + CELL_SIZE)
+          ctx.moveTo(cx, cy + cellSize)
+          ctx.lineTo(cx + cellSize, cy + cellSize)
           ctx.stroke()
         }
         if (cell.walls.left) {
           ctx.beginPath()
           ctx.moveTo(cx, cy)
-          ctx.lineTo(cx, cy + CELL_SIZE)
+          ctx.lineTo(cx, cy + cellSize)
           ctx.stroke()
         }
       }
     }
 
     // Draw goal with glow effect (matching legend style)
-    const gx = maze.goal.x * CELL_SIZE + WALL_WIDTH / 2 + CELL_SIZE / 2
-    const gy = maze.goal.y * CELL_SIZE + WALL_WIDTH / 2 + CELL_SIZE / 2
-    const goalRadius = CELL_SIZE / 4
+    const gx = maze.goal.x * cellSize + WALL_WIDTH / 2 + cellSize / 2
+    const gy = maze.goal.y * cellSize + WALL_WIDTH / 2 + cellSize / 2
+    const goalRadius = cellSize / 4
 
     if (hasReachedGoal) {
       // Draw success blue orb when goal reached
@@ -360,9 +362,9 @@ export default function InteractiveMaze({
       ctx.shadowBlur = 0
 
       // Draw player as a small white rounded square
-      const px = playerPos.x * CELL_SIZE + WALL_WIDTH / 2 + CELL_SIZE / 2
-      const py = playerPos.y * CELL_SIZE + WALL_WIDTH / 2 + CELL_SIZE / 2
-      const playerSize = CELL_SIZE * 0.4
+      const px = playerPos.x * cellSize + WALL_WIDTH / 2 + cellSize / 2
+      const py = playerPos.y * cellSize + WALL_WIDTH / 2 + cellSize / 2
+      const playerSize = cellSize * 0.4
       const playerRadius = playerSize / 4
 
       ctx.shadowColor = PLAYER_GLOW
@@ -373,7 +375,16 @@ export default function InteractiveMaze({
       ctx.fill()
       ctx.shadowBlur = 0
     }
-  }, [maze, playerPos, pathPositions, canvasWidth, canvasHeight, showPath, hasReachedGoal])
+  }, [
+    maze,
+    playerPos,
+    pathPositions,
+    canvasWidth,
+    canvasHeight,
+    showPath,
+    hasReachedGoal,
+    cellSize,
+  ])
 
   return (
     <div
