@@ -24,6 +24,93 @@ interface VisualizerEvaluation {
   costUsd: number | null
 }
 
+/**
+ * Pre-aggregated data for efficient UI consumption
+ * ~25-30 records instead of 1,200 individual evaluations
+ */
+interface CondensedRecord {
+  model: string
+  format: string
+  totalEvals: number
+  successes: number
+  avgEfficiency: number
+  avgInferenceTimeMs: number
+  totalCostUsd: number
+  byDifficulty: Record<
+    string,
+    {
+      evals: number
+      successes: number
+      avgTimeMs: number
+      avgEfficiency: number
+    }
+  >
+}
+
+/**
+ * Condense raw evaluation data into aggregated model+format records
+ */
+function condenseData(raw: VisualizerEvaluation[]): CondensedRecord[] {
+  const grouped = new Map<string, VisualizerEvaluation[]>()
+
+  for (const r of raw) {
+    const format =
+      r.promptFormats.includes('edges') && r.promptFormats.includes('ascii')
+        ? 'edges_ascii'
+        : r.promptFormats[0]
+    const key = `${r.model}|${format}`
+    if (!grouped.has(key)) grouped.set(key, [])
+    grouped.get(key)!.push(r)
+  }
+
+  const results: CondensedRecord[] = []
+
+  for (const [key, evals] of grouped) {
+    const parts = key.split('|')
+    const model = parts[0] ?? ''
+    const format = parts[1] ?? ''
+    const successes = evals.filter((e) => e.outcome === 'success')
+
+    // Group by difficulty
+    const byDiff: Record<string, VisualizerEvaluation[]> = {}
+    for (const e of evals) {
+      const diff = e.difficulty
+      if (!byDiff[diff]) byDiff[diff] = []
+      byDiff[diff].push(e)
+    }
+
+    const byDifficulty: CondensedRecord['byDifficulty'] = {}
+    for (const [diff, diffEvals] of Object.entries(byDiff)) {
+      const diffSuccesses = diffEvals.filter((e) => e.outcome === 'success')
+      byDifficulty[diff] = {
+        evals: diffEvals.length,
+        successes: diffSuccesses.length,
+        avgTimeMs: diffEvals.reduce((a, e) => a + e.inferenceTimeMs, 0) / diffEvals.length,
+        avgEfficiency:
+          diffSuccesses.length > 0
+            ? diffSuccesses.reduce((a, e) => a + (e.efficiency ?? 0), 0) / diffSuccesses.length
+            : 0,
+      }
+    }
+
+    results.push({
+      model,
+      format,
+      totalEvals: evals.length,
+      successes: successes.length,
+      avgEfficiency:
+        successes.length > 0
+          ? successes.reduce((a, e) => a + (e.efficiency ?? 0), 0) / successes.length
+          : 0,
+      avgInferenceTimeMs: evals.reduce((a, e) => a + e.inferenceTimeMs, 0) / evals.length,
+      totalCostUsd: evals.reduce((a, e) => a + (e.costUsd ?? 0), 0),
+      byDifficulty,
+    })
+  }
+
+  return results
+}
+
 function findDatabases(): string[] {
   const resultsDir = './results'
   if (!existsSync(resultsDir)) return []
@@ -83,11 +170,22 @@ async function run() {
   const results = getAllEvaluations(databasePath)
   writeFileSync(outputPath, JSON.stringify(results, null, 2), 'utf-8')
 
+  // Generate condensed mini version
+  const condensed = condenseData(results)
+  const miniOutputPath = outputPath.replace(/\.json$/, '-mini.json')
+  writeFileSync(miniOutputPath, JSON.stringify(condensed, null, 2), 'utf-8')
+
   console.log()
   console.log(chalk.dim('─'.repeat(50)))
   console.log(chalk.bold('Export Complete'))
+  console.log()
+  console.log(chalk.dim('Full results:'))
   console.log(`  Records: ${results.length}`)
   console.log(`  Output: ${chalk.cyan(outputPath)}`)
+  console.log()
+  console.log(chalk.dim('Condensed results:'))
+  console.log(`  Records: ${condensed.length}`)
+  console.log(`  Output: ${chalk.cyan(miniOutputPath)}`)
   console.log()
 }
 
