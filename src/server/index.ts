@@ -12,7 +12,7 @@ const app = new Hono()
 app.use('*', cors())
 
 const ROOT_DIR = resolve(import.meta.dirname, '../..')
-const DATA_DIR = join(ROOT_DIR, 'data')
+const DATA_DIR = join(ROOT_DIR, 'test-sets')
 const RESULTS_DIR = join(ROOT_DIR, 'results')
 const DB_PATH = join(RESULTS_DIR, 'eval.db')
 
