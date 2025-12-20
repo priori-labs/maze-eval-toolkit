@@ -70,7 +70,7 @@ export default function MazeViewer({
     }
   }
 
-  // Calculate player position during replay (respecting walls)
+  // Calculate player position during replay (following all moves, even invalid ones)
   const getPlayerPosition = useCallback((): Position => {
     if (!isReplaying || !solution?.parsedMoves) {
       return maze.start
@@ -80,16 +80,15 @@ export default function MazeViewer({
     const moves = solution.parsedMoves.slice(0, replayStep)
 
     for (const move of moves) {
-      if (isMoveValid(pos, move)) {
-        pos = getTargetPosition(pos, move)
-      }
-      // Invalid moves don't change position
+      // Always follow the move, even if invalid (walking through walls)
+      pos = getTargetPosition(pos, move)
     }
 
     return pos
-  }, [isReplaying, solution?.parsedMoves, replayStep, maze.start, isMoveValid])
+  }, [isReplaying, solution?.parsedMoves, replayStep, maze.start])
 
   // Get path positions and invalid move positions up to current replay step
+  // Path continues through invalid moves (walking through walls), but invalid positions are highlighted red
   const getPathAndInvalidPositions = useCallback((): {
     path: Position[]
     invalid: Position[]
@@ -105,13 +104,15 @@ export default function MazeViewer({
     for (let i = 0; i < limit; i++) {
       const move = solution.parsedMoves[i]!
       const target = getTargetPosition(pos, move)
+      const isValid = isMoveValid(pos, move)
 
-      if (isMoveValid(pos, move)) {
-        pos = target
-        path.push({ ...pos })
-      } else {
-        // Invalid move - highlight the attempted target
-        invalid.push(target)
+      // Always continue the path, even through walls
+      pos = target
+      path.push({ ...pos })
+
+      if (!isValid) {
+        // Mark this position as an invalid move (walked through a wall)
+        invalid.push({ ...pos })
       }
     }
 

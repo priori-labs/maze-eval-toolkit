@@ -383,48 +383,20 @@ function generateBranches(
 /**
  * Phase 3: Fill remaining unvisited areas with DFS passages
  *
- * This connects boxed-in areas to the existing maze structure,
- * creating additional explorable dead-ends instead of solid walls.
+ * This fills boxed-in areas with maze passages but does NOT connect them
+ * to the main maze structure. The filled areas remain isolated and unreachable,
+ * creating visual maze texture in otherwise solid wall regions.
  */
 function fillRemainingAreas(grid: SpineGenerationCell[][], width: number, height: number): void {
-  // Find all unvisited cells and try to connect them to visited areas
+  // Find all unvisited cells and fill their regions with passages (no connection to main maze)
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const cell = grid[y]![x]!
       if (cell.visited) continue
 
-      // Check if this unvisited cell has any visited neighbors
-      const visitedNeighbors = getNeighbors(grid, cell, width, height).filter((n) => n.visited)
-
-      if (visitedNeighbors.length > 0) {
-        // Connect to a random visited neighbor
-        const connector = visitedNeighbors[Math.floor(Math.random() * visitedNeighbors.length)]!
-        removeWallBetween(connector, cell)
-        cell.visited = true
-
-        // Run DFS from this cell to fill the connected area
-        fillAreaDFS(grid, cell, width, height)
-      }
-    }
-  }
-
-  // Second pass: fill any remaining isolated areas by connecting to nearest visited cell
-  // This handles areas completely surrounded by unvisited cells
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const cell = grid[y]![x]!
-      if (cell.visited) continue
-
-      // This cell is still unvisited - start a new isolated DFS region
+      // Start a new isolated region - fill with DFS passages but don't connect to main maze
       cell.visited = true
       fillAreaDFS(grid, cell, width, height)
-
-      // Now try to connect this region to the main maze
-      const visitedNeighbors = getNeighbors(grid, cell, width, height).filter((n) => n.visited)
-      if (visitedNeighbors.length > 0) {
-        const connector = visitedNeighbors[Math.floor(Math.random() * visitedNeighbors.length)]!
-        removeWallBetween(connector, cell)
-      }
     }
   }
 }
