@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { EvaluationResult, MazeWithPrompts, Position } from '../../core/types'
 
-const CELL_SIZE = 28
+const CELL_SIZE = 20
 const WALL_WIDTH = 2
 const PLAYER_COLOR = '#ffffff' // white
 const PLAYER_GLOW = '#e2e8f0'
 const GOAL_COLOR = '#4ade80' // bright green
 const GOAL_GLOW = '#22c55e'
-const PATH_COLOR = 'rgba(96, 165, 250, 0.2)' // subtle blue path highlight
+const PATH_COLOR = 'rgba(59, 130, 246, 0.45)' // blue path highlight
+const INVALID_MOVE_COLOR = 'rgba(239, 68, 68, 0.5)' // red for invalid moves
 const WALL_COLOR = '#e2e8f0' // white/gray walls
 const FLOOR_COLOR = '#1a1a1a' // dark gray
 
@@ -31,7 +32,45 @@ export default function MazeViewer({
   const width = maze.width * CELL_SIZE + WALL_WIDTH
   const height = maze.height * CELL_SIZE + WALL_WIDTH
 
-  // Calculate player position during replay
+  // Check if a move is valid (no wall blocking)
+  const isMoveValid = useCallback(
+    (pos: Position, move: string): boolean => {
+      const cell = maze.grid[pos.y]?.[pos.x]
+      if (!cell) return false
+
+      switch (move) {
+        case 'UP':
+          return !cell.walls.top
+        case 'DOWN':
+          return !cell.walls.bottom
+        case 'LEFT':
+          return !cell.walls.left
+        case 'RIGHT':
+          return !cell.walls.right
+        default:
+          return false
+      }
+    },
+    [maze.grid],
+  )
+
+  // Get target position for a move
+  const getTargetPosition = (pos: Position, move: string): Position => {
+    switch (move) {
+      case 'UP':
+        return { ...pos, y: pos.y - 1 }
+      case 'DOWN':
+        return { ...pos, y: pos.y + 1 }
+      case 'LEFT':
+        return { ...pos, x: pos.x - 1 }
+      case 'RIGHT':
+        return { ...pos, x: pos.x + 1 }
+      default:
+        return pos
+    }
+  }
+
+  // Calculate player position during replay (respecting walls)
   const getPlayerPosition = useCallback((): Position => {
     if (!isReplaying || !solution?.parsedMoves) {
       return maze.start
@@ -41,55 +80,43 @@ export default function MazeViewer({
     const moves = solution.parsedMoves.slice(0, replayStep)
 
     for (const move of moves) {
-      switch (move) {
-        case 'UP':
-          pos = { ...pos, y: pos.y - 1 }
-          break
-        case 'DOWN':
-          pos = { ...pos, y: pos.y + 1 }
-          break
-        case 'LEFT':
-          pos = { ...pos, x: pos.x - 1 }
-          break
-        case 'RIGHT':
-          pos = { ...pos, x: pos.x + 1 }
-          break
+      if (isMoveValid(pos, move)) {
+        pos = getTargetPosition(pos, move)
       }
+      // Invalid moves don't change position
     }
 
     return pos
-  }, [isReplaying, solution?.parsedMoves, replayStep, maze.start])
+  }, [isReplaying, solution?.parsedMoves, replayStep, maze.start, isMoveValid])
 
-  // Get path positions up to current replay step
-  const getPathPositions = useCallback((): Position[] => {
-    if (!solution?.parsedMoves) return []
+  // Get path positions and invalid move positions up to current replay step
+  const getPathAndInvalidPositions = useCallback((): {
+    path: Position[]
+    invalid: Position[]
+  } => {
+    if (!solution?.parsedMoves) return { path: [], invalid: [] }
 
-    const positions: Position[] = [{ ...maze.start }]
+    const path: Position[] = [{ ...maze.start }]
+    const invalid: Position[] = []
     let pos = { ...maze.start }
 
     const limit = isReplaying ? replayStep : solution.parsedMoves.length
 
     for (let i = 0; i < limit; i++) {
       const move = solution.parsedMoves[i]!
-      switch (move) {
-        case 'UP':
-          pos = { ...pos, y: pos.y - 1 }
-          break
-        case 'DOWN':
-          pos = { ...pos, y: pos.y + 1 }
-          break
-        case 'LEFT':
-          pos = { ...pos, x: pos.x - 1 }
-          break
-        case 'RIGHT':
-          pos = { ...pos, x: pos.x + 1 }
-          break
+      const target = getTargetPosition(pos, move)
+
+      if (isMoveValid(pos, move)) {
+        pos = target
+        path.push({ ...pos })
+      } else {
+        // Invalid move - highlight the attempted target
+        invalid.push(target)
       }
-      positions.push({ ...pos })
     }
 
-    return positions
-  }, [solution?.parsedMoves, isReplaying, replayStep, maze.start])
+    return { path, invalid }
+  }, [solution?.parsedMoves, isReplaying, replayStep, maze.start, isMoveValid])
 
   // Replay animation
   useEffect(() => {
@@ -105,7 +132,7 @@ export default function MazeViewer({
 
     const timer = setTimeout(() => {
       setReplayStep((s) => s + 1)
-    }, 300)
+    }, 50)
 
     return () => clearTimeout(timer)
   }, [isReplaying, replayStep, solution?.parsedMoves, onReplayComplete])
@@ -124,19 +151,24 @@ export default function MazeViewer({
     if (!ctx) return
 
     const playerPos = getPlayerPosition()
-    const pathPositions = getPathPositions()
+    const { path: pathPositions, invalid: invalidPositions } = getPathAndInvalidPositions()
     const pathSet = new Set(pathPositions.map((p) => `${p.x},${p.y}`))
+    const invalidSet = new Set(invalidPositions.map((p) => `${p.x},${p.y}`))
 
     // Clear canvas with floor color
     ctx.fillStyle = FLOOR_COLOR
     ctx.fillRect(0, 0, width, height)
 
-    // Draw path highlights
+    // Draw path highlights and invalid move highlights
     for (let y = 0; y < maze.height; y++) {
       for (let x = 0; x < maze.width; x++) {
-        if (pathSet.has(`${x},${y}`)) {
-          const cx = x * CELL_SIZE + WALL_WIDTH / 2
-          const cy = y * CELL_SIZE + WALL_WIDTH / 2
+        const cx = x * CELL_SIZE + WALL_WIDTH / 2
+        const cy = y * CELL_SIZE + WALL_WIDTH / 2
+
+        if (invalidSet.has(`${x},${y}`)) {
+          ctx.fillStyle = INVALID_MOVE_COLOR
+          ctx.fillRect(cx, cy, CELL_SIZE, CELL_SIZE)
+        } else if (pathSet.has(`${x},${y}`)) {
           ctx.fillStyle = PATH_COLOR
           ctx.fillRect(cx, cy, CELL_SIZE, CELL_SIZE)
         }
@@ -210,7 +242,7 @@ export default function MazeViewer({
     ctx.roundRect(px - playerSize / 2, py - playerSize / 2, playerSize, playerSize, playerRadius)
     ctx.fill()
     ctx.shadowBlur = 0
-  }, [maze, getPlayerPosition, getPathPositions, width, height])
+  }, [maze, getPlayerPosition, getPathAndInvalidPositions, width, height])
 
   return (
     <div className="flex flex-col items-center">

@@ -153,7 +153,7 @@ export default function HumanEval({
   // Completion screen
   if (isComplete && stats) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="flex-1 flex items-center justify-center">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="text-center text-green-500">Evaluation Complete!</CardTitle>
@@ -195,7 +195,7 @@ export default function HumanEval({
   // Submitting screen
   if (isSubmitting) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="flex-1 flex items-center justify-center">
         <Card className="w-full max-w-md">
           <CardContent className="py-12 text-center">
             <p className="text-lg">Saving results...</p>
@@ -208,7 +208,7 @@ export default function HumanEval({
   // Error screen
   if (submitError) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="flex-1 flex items-center justify-center">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="text-center text-red-500">Error</CardTitle>
@@ -226,7 +226,7 @@ export default function HumanEval({
 
   if (!currentMaze) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="flex-1 flex items-center justify-center">
         <p>No mazes to evaluate</p>
       </div>
     )

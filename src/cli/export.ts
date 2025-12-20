@@ -11,10 +11,12 @@ import type { Difficulty, EvaluationOutcome, PromptFormat } from '../core/types'
 import { closeDatabase, initDatabase } from '../db/client'
 
 /**
- * Minimal evaluation data required for the visualizer
- * Excludes large fields like prompt, rawResponse, parsedMoves, reasoning
+ * Evaluation data for the UI viewer
+ * Includes fields needed for solution replay and details view
  */
 interface VisualizerEvaluation {
+  id: string
+  mazeId: string
   model: string
   difficulty: Difficulty
   promptFormats: PromptFormat[]
@@ -24,6 +26,14 @@ interface VisualizerEvaluation {
   costUsd: number | null
   testSetId: string
   testSetName: string
+  // Solution details
+  parsedMoves: string[] | null
+  rawResponse: string
+  reasoning: string | null
+  solutionLength: number | null
+  inputTokens: number | null
+  outputTokens: number | null
+  reasoningTokens: number | null
 }
 
 /**
@@ -143,13 +153,15 @@ function getTestSets(dbPath: string): TestSetInfo[] {
 function getAllEvaluations(dbPath: string, testSetId?: string): VisualizerEvaluation[] {
   const db = initDatabase(dbPath)
   const sql = testSetId
-    ? 'SELECT model, difficulty, prompt_formats, outcome, efficiency, inference_time_ms, cost_usd, test_set_id, test_set_name FROM evaluations WHERE test_set_id = ?'
-    : 'SELECT model, difficulty, prompt_formats, outcome, efficiency, inference_time_ms, cost_usd, test_set_id, test_set_name FROM evaluations'
+    ? 'SELECT id, maze_id, model, difficulty, prompt_formats, outcome, efficiency, inference_time_ms, cost_usd, test_set_id, test_set_name, parsed_moves, raw_response, reasoning, solution_length, input_tokens, output_tokens, reasoning_tokens FROM evaluations WHERE test_set_id = ?'
+    : 'SELECT id, maze_id, model, difficulty, prompt_formats, outcome, efficiency, inference_time_ms, cost_usd, test_set_id, test_set_name, parsed_moves, raw_response, reasoning, solution_length, input_tokens, output_tokens, reasoning_tokens FROM evaluations'
   const query = db.query(sql)
   const rows = (testSetId ? query.all(testSetId) : query.all()) as any[]
   closeDatabase()
 
   return rows.map((row) => ({
+    id: row.id,
+    mazeId: row.maze_id,
     model: row.model,
     difficulty: row.difficulty,
     promptFormats: JSON.parse(row.prompt_formats),
@@ -159,6 +171,13 @@ function getAllEvaluations(dbPath: string, testSetId?: string): VisualizerEvalua
     costUsd: row.cost_usd,
     testSetId: row.test_set_id,
     testSetName: row.test_set_name,
+    parsedMoves: row.parsed_moves ? JSON.parse(row.parsed_moves) : null,
+    rawResponse: row.raw_response,
+    reasoning: row.reasoning,
+    solutionLength: row.solution_length,
+    inputTokens: row.input_tokens,
+    outputTokens: row.output_tokens,
+    reasoningTokens: row.reasoning_tokens,
   }))
 }
 

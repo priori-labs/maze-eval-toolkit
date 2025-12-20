@@ -61,7 +61,11 @@ export default function App() {
 
     fetch('/api/results')
       .then((r) => r.json())
-      .then((d: { files: string[] }) => setResultsFiles(d.files))
+      .then((d: { files: string[] }) => {
+        // Exclude mini files - they don't have per-maze solution data
+        const fullFiles = d.files.filter((f) => !f.includes('-mini'))
+        setResultsFiles(fullFiles)
+      })
       .catch(() => setResultsFiles([]))
   }, [])
 
@@ -108,13 +112,6 @@ export default function App() {
   // Navigation handlers
   const goToMaze = useCallback((index: number) => {
     setCurrentIndex(index)
-    setSelectedResult(null)
-    setIsReplaying(false)
-  }, [])
-
-  const changeDifficulty = useCallback((difficulty: Difficulty) => {
-    setCurrentDifficulty(difficulty)
-    setCurrentIndex(0)
     setSelectedResult(null)
     setIsReplaying(false)
   }, [])
@@ -233,7 +230,7 @@ export default function App() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="h-screen flex flex-col text-foreground overflow-auto">
       {/* Header */}
       <header className="bg-card border-b border-border px-6 py-4">
         <div className="flex items-center justify-between">
@@ -247,6 +244,27 @@ export default function App() {
           </h1>
           {mode === 'viewer' && (
             <div className="flex items-center gap-4">
+              {/* Results File Select */}
+              {testSet && (
+                <Select value={selectedResultsFile} onValueChange={handleResultsFileSelect}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Select results..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {resultsFiles.length === 0 ? (
+                      <SelectItem value="_none" disabled>
+                        No results found
+                      </SelectItem>
+                    ) : (
+                      resultsFiles.map((file) => (
+                        <SelectItem key={file} value={file}>
+                          {file.replace('.json', '')}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              )}
               <Button onClick={() => setMode('human-eval-setup')}>Human Eval</Button>
               <Select onValueChange={handleQuickRun}>
                 <SelectTrigger className="w-[180px]">
@@ -285,7 +303,7 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className="p-6">
+      <main className="flex-1 flex flex-col p-6">
         {/* Human Eval Setup */}
         {mode === 'human-eval-setup' && (
           <HumanEvalSetup onStart={handleStartHumanEval} onCancel={() => setMode('viewer')} />
@@ -305,7 +323,7 @@ export default function App() {
 
         {/* Viewer Mode */}
         {mode === 'viewer' && !testSet ? (
-          <div className="text-center py-20">
+          <div className="flex-1 flex flex-col items-center justify-center">
             <p className="text-muted-foreground text-lg">
               Load a test set JSON file to get started
             </p>
@@ -334,27 +352,9 @@ export default function App() {
             </p>
           </div>
         ) : mode === 'viewer' && testSet ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Left Panel - Maze View */}
             <div className="lg:col-span-2 space-y-4">
-              {/* Difficulty tabs */}
-              <div className="flex gap-2">
-                {DIFFICULTIES.map((d) => {
-                  const count = testSet.mazes[d]?.length ?? 0
-                  if (count === 0) return null
-                  return (
-                    <Button
-                      key={d}
-                      onClick={() => changeDifficulty(d)}
-                      variant={currentDifficulty === d ? 'default' : 'ghost'}
-                      size="sm"
-                    >
-                      {d} ({count})
-                    </Button>
-                  )
-                })}
-              </div>
-
               {/* Navigation */}
               <Navigation current={currentIndex} total={totalMazes} onNavigate={goToMaze} />
 
@@ -362,9 +362,11 @@ export default function App() {
               {currentMaze && (
                 <div className="bg-card rounded-lg p-4 border border-border">
                   <div className="flex justify-between items-center mb-4">
-                    <div>
-                      <span className="text-muted-foreground text-sm">Maze ID: </span>
-                      <span className="font-mono text-sm">{currentMaze.id}</span>
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">Maze ID: </span>
+                      <code className="text-xs bg-muted px-1.5 py-0.5 rounded text-cyan-400 font-mono">
+                        {currentMaze.id}
+                      </code>
                     </div>
                     <div className="text-sm">
                       <span className="text-muted-foreground">Size: </span>
@@ -387,29 +389,6 @@ export default function App() {
 
             {/* Right Panel - Results */}
             <div className="space-y-4">
-              {/* Results File Select */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Results:</span>
-                <Select value={selectedResultsFile} onValueChange={handleResultsFileSelect}>
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="Select results..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {resultsFiles.length === 0 ? (
-                      <SelectItem value="_none" disabled>
-                        No files found
-                      </SelectItem>
-                    ) : (
-                      resultsFiles.map((file) => (
-                        <SelectItem key={file} value={file}>
-                          {file}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-
               {/* Model Summary */}
               {currentMaze && mazeResults.length > 0 && (
                 <ModelSummary

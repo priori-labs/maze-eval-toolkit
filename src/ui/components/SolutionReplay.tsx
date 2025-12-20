@@ -1,8 +1,19 @@
 import type { EvaluationResult } from '../../core/types'
-import { Card, CardContent, CardHeader, CardTitle } from './ui'
-import { Button } from './ui'
-import { Badge } from './ui'
-import { Separator } from './ui'
+import { Button, Card, CardContent, CardHeader, CardTitle, Separator } from './ui'
+
+function formatNumber(n: number | null): string {
+  if (n === null) return '-'
+  return n.toLocaleString()
+}
+
+function formatTime(ms: number): string {
+  if (ms < 1000) return `${ms}ms`
+  const totalSeconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  if (minutes === 0) return `${seconds}s`
+  return `${minutes}m ${seconds}s`
+}
 
 interface SolutionReplayProps {
   result: EvaluationResult
@@ -21,83 +32,63 @@ export default function SolutionReplay({
 
   return (
     <Card>
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-2">
         <CardTitle className="text-lg">Solution Details</CardTitle>
+        {/* Stats */}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1">
+          <span>In: {formatNumber(result.inputTokens)}</span>
+          <span>Out: {formatNumber(result.outputTokens)}</span>
+          {result.reasoningTokens !== null && (
+            <span>Reasoning: {formatNumber(result.reasoningTokens)}</span>
+          )}
+          <span>{formatTime(result.inferenceTimeMs)}</span>
+          {result.costUsd !== null && <span>${result.costUsd.toFixed(4)}</span>}
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Controls */}
-        {moves.length > 0 && (
-          <Button
-            onClick={isReplaying ? onStopReplay : onStartReplay}
-            variant={isReplaying ? 'destructive' : 'default'}
-            size="sm"
-          >
-            {isReplaying ? 'Stop' : 'Replay'}
-          </Button>
-        )}
-
-        {/* Moves */}
-        {moves.length > 0 ? (
-          <div>
-            <div className="text-sm text-muted-foreground mb-2">Moves ({moves.length}):</div>
-            <div className="flex flex-wrap gap-1">
-              {moves.map((move, i) => (
-                <Badge key={`${move}-${i}`} variant="outline" className="font-mono">
-                  {move}
-                </Badge>
-              ))}
+        {/* Moves - abbreviated to one line with replay button */}
+        <div className="flex items-center justify-between">
+          {moves.length > 0 ? (
+            <div className="text-sm">
+              <span className="text-muted-foreground">Moves ({moves.length}): </span>
+              <code className="text-xs bg-muted px-1.5 py-0.5 rounded text-amber-400 font-mono">
+                {moves.slice(0, 6).join(', ')}
+                {moves.length > 6 && ', ...'}
+              </code>
             </div>
-          </div>
-        ) : (
-          <div className="text-sm text-muted-foreground">No moves parsed from response</div>
-        )}
+          ) : (
+            <div className="text-sm text-muted-foreground">No moves parsed</div>
+          )}
+          {moves.length > 0 && (
+            <Button
+              onClick={isReplaying ? onStopReplay : onStartReplay}
+              variant="outline"
+              size="xs"
+            >
+              {isReplaying ? 'Stop' : 'Replay'}
+            </Button>
+          )}
+        </div>
 
         <Separator />
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <div className="text-muted-foreground">Input Tokens:</div>
-          <div>{result.inputTokens ?? '-'}</div>
-
-          <div className="text-muted-foreground">Output Tokens:</div>
-          <div>{result.outputTokens ?? '-'}</div>
-
-          {result.reasoningTokens !== null && (
-            <>
-              <div className="text-muted-foreground">Reasoning Tokens:</div>
-              <div>{result.reasoningTokens}</div>
-            </>
-          )}
-
-          <div className="text-muted-foreground">Time:</div>
-          <div>{result.inferenceTimeMs}ms</div>
-
-          <div className="text-muted-foreground">Cost:</div>
-          <div>{result.costUsd !== null ? `$${result.costUsd.toFixed(4)}` : '-'}</div>
-        </div>
-
         {/* Reasoning */}
         {result.reasoning && (
-          <>
-            <Separator />
-            <div>
-              <div className="text-sm text-muted-foreground mb-2">Model Reasoning:</div>
-              <div className="bg-muted rounded-md p-3 text-sm max-h-40 overflow-y-auto">
-                {result.reasoning}
-              </div>
+          <div>
+            <div className="text-sm font-bold mb-2">Model Reasoning</div>
+            <div className="bg-muted rounded-md p-2 text-xs text-muted-foreground whitespace-pre-wrap">
+              {result.reasoning}
             </div>
-          </>
+          </div>
         )}
 
-        {/* Raw Response */}
-        <details className="mt-4">
-          <summary className="text-sm text-muted-foreground cursor-pointer hover:text-foreground">
-            Raw Response
-          </summary>
-          <div className="mt-2 bg-muted rounded-md p-2 text-xs text-muted-foreground max-h-40 overflow-y-auto font-mono whitespace-pre-wrap">
-            {result.rawResponse}
+        {/* Full Response */}
+        <div>
+          <div className="text-sm font-bold mb-2">Full Response</div>
+          <div className="bg-muted rounded-md p-2 text-xs text-muted-foreground font-mono whitespace-pre-wrap">
+            {result.rawResponse || <span className="italic">No response</span>}
           </div>
-        </details>
+        </div>
       </CardContent>
     </Card>
   )

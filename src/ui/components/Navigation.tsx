@@ -11,7 +11,7 @@ export default function Navigation({ current, total, onNavigate }: NavigationPro
   return (
     <div className="flex items-center justify-between bg-card rounded-lg px-4 py-3 border border-border">
       <Button
-        variant="ghost"
+        variant="outline"
         onClick={() => onNavigate(Math.max(0, current - 1))}
         disabled={current === 0}
       >
@@ -37,7 +37,7 @@ export default function Navigation({ current, total, onNavigate }: NavigationPro
       </div>
 
       <Button
-        variant="ghost"
+        variant="outline"
         onClick={() => onNavigate(Math.min(total - 1, current + 1))}
         disabled={current >= total - 1}
       >

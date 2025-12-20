@@ -66,7 +66,7 @@ export default function HumanEvalSetup({ onStart, onCancel }: HumanEvalSetupProp
   }
 
   return (
-    <div className="flex items-center justify-center min-h-[60vh]">
+    <div className="flex-1 flex items-center justify-center">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Human Evaluation Setup</CardTitle>
