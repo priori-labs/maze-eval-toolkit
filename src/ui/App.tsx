@@ -230,7 +230,7 @@ export default function App() {
   }, [])
 
   return (
-    <div className="h-screen flex flex-col text-foreground overflow-auto">
+    <div className="h-full flex flex-col bg-background text-foreground">
       {/* Header */}
       <header className="bg-card border-b border-border px-6 py-4">
         <div className="flex items-center justify-between">
@@ -303,7 +303,7 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col p-6">
+      <main className="flex-1 flex flex-col p-6 overflow-auto">
         {/* Human Eval Setup */}
         {mode === 'human-eval-setup' && (
           <HumanEvalSetup onStart={handleStartHumanEval} onCancel={() => setMode('viewer')} />

@@ -33,7 +33,7 @@
   }
 
   .dark {
-    --background: 0 0% 2%;
+    --background: 0 0% 0%;
     --foreground: 0 0% 95%;
     --card: 0 0% 10%;
     --card-foreground: 0 0% 95%;
@@ -68,6 +68,16 @@
 
   html {
     height: 100%;
+    background-color: hsl(var(--background));
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  #root {
     background-color: hsl(var(--background));
   }
 

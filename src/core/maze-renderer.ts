@@ -442,7 +442,7 @@ export function generatePrompt(
 
   // Introduction
   sections.push(
-    'You are navigating a maze. Your task is to find the path from the start position (P) to the goal (G).',
+    'You are navigating a maze. Your task is to find a path from the start position (P) to the goal (G).',
   )
   sections.push('')
   sections.push(`Maze dimensions: ${maze.width}x${maze.height}`)

@@ -28,10 +28,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Apply theme on mount and when it changes
   useEffect(() => {
     const root = document.documentElement
+    const body = document.body
     if (theme === 'dark') {
       root.classList.add('dark')
+      body.classList.add('dark')
     } else {
       root.classList.remove('dark')
+      body.classList.remove('dark')
     }
     localStorage.setItem('theme', theme)
   }, [theme])
