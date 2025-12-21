@@ -21,16 +21,7 @@ import type {
 import { closeDatabase, initDatabase } from '../db/client'
 import { updateEvaluation } from '../db/queries'
 import { createClient, evaluateMaze } from '../llm/openrouter'
-
-interface RunSummary {
-  runId: string
-  model: string
-  testSetId: string
-  promptFormats: PromptFormat[]
-  count: number
-  outcomes: Record<string, number>
-  startedAt: string
-}
+import { DB_DIR, findDatabases, getRunSummaries } from './utils'
 
 const RETRYABLE_OUTCOMES: EvaluationOutcome[] = [
   'empty_response',
@@ -41,73 +32,6 @@ const RETRYABLE_OUTCOMES: EvaluationOutcome[] = [
   'timeout',
   'api_error',
 ]
-
-function findDatabases(): string[] {
-  const resultsDir = './results'
-  if (!existsSync(resultsDir)) return []
-  return readdirSync(resultsDir)
-    .filter((f) => f.endsWith('.db'))
-    .map((f) => `${resultsDir}/${f}`)
-}
-
-function getRunSummaries(dbPath: string): RunSummary[] {
-  const db = initDatabase(dbPath)
-
-  // Get unique runs with their details
-  const query = db.query(`
-    SELECT
-      run_id,
-      model,
-      test_set_id,
-      prompt_formats,
-      COUNT(*) as count,
-      MIN(started_at) as started_at
-    FROM evaluations
-    GROUP BY run_id
-    ORDER BY started_at DESC
-  `)
-  const rows = query.all() as Array<{
-    run_id: string
-    model: string
-    test_set_id: string
-    prompt_formats: string
-    count: number
-    started_at: string
-  }>
-
-  // Get outcome counts per run
-  const summaries: RunSummary[] = []
-  for (const row of rows) {
-    const outcomeQuery = db.query(`
-      SELECT outcome, COUNT(*) as count
-      FROM evaluations
-      WHERE run_id = ?
-      GROUP BY outcome
-    `)
-    const outcomeRows = outcomeQuery.all(row.run_id) as Array<{
-      outcome: string
-      count: number
-    }>
-
-    const outcomes: Record<string, number> = {}
-    for (const o of outcomeRows) {
-      outcomes[o.outcome] = o.count
-    }
-
-    summaries.push({
-      runId: row.run_id,
-      model: row.model,
-      testSetId: row.test_set_id,
-      promptFormats: JSON.parse(row.prompt_formats) as PromptFormat[],
-      count: row.count,
-      outcomes,
-      startedAt: row.started_at,
-    })
-  }
-
-  closeDatabase()
-  return summaries
-}
 
 function getEvaluationsToRetry(
   dbPath: string,
@@ -214,7 +138,7 @@ async function run() {
   // Find available databases
   const databases = findDatabases()
   if (databases.length === 0) {
-    console.error(chalk.red('No databases found in ./results/'))
+    console.error(chalk.red(`No databases found in ${DB_DIR}/`))
     process.exit(1)
   }
 

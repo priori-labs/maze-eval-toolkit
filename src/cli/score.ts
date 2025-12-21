@@ -21,7 +21,7 @@ import type {
   TestSetHumanBaselines,
 } from '../core/types'
 import { closeDatabase, initDatabase } from '../db/client'
-import { formatDuration } from './utils'
+import { DB_DIR, findDatabases, formatDuration } from './utils'
 
 /**
  * Load custom baselines from a test set file by test set ID
@@ -535,14 +535,6 @@ function printAllModelsSummary(
   }
 }
 
-function findDatabases(): string[] {
-  const resultsDir = './results'
-  if (!existsSync(resultsDir)) return []
-  return readdirSync(resultsDir)
-    .filter((f) => f.endsWith('.db'))
-    .map((f) => `${resultsDir}/${f}`)
-}
-
 async function promptForOptions(): Promise<ScoreOptions> {
   console.log(chalk.bold('\nLMIQ Score Calculator'))
   console.log(chalk.dim('─'.repeat(50)))
@@ -551,7 +543,7 @@ async function promptForOptions(): Promise<ScoreOptions> {
   // Find available databases
   const databases = findDatabases()
   if (databases.length === 0) {
-    console.error(chalk.red('No databases found in ./results/'))
+    console.error(chalk.red(`No databases found in ${DB_DIR}/`))
     console.error('Run `task evaluate` to create one')
     process.exit(1)
   }

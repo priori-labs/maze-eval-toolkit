@@ -23,7 +23,7 @@ import { DIFFICULTIES, PROMPT_FORMATS } from '../core/types'
 import { closeDatabase, initDatabase } from '../db/client'
 import { createEvaluationResult, insertEvaluation } from '../db/queries'
 import { createClient, evaluateMaze } from '../llm/openrouter'
-import { formatDuration } from './utils'
+import { DB_DIR, formatDuration } from './utils'
 
 interface EvaluateOptions {
   testSetPath: string
@@ -149,11 +149,11 @@ async function promptForOptions(): Promise<EvaluateOptions> {
   })
 
   // Output path (only ask if saving to DB)
-  let outputPath = './results/eval.db'
+  let outputPath = `${DB_DIR}/eval.db`
   if (saveToDb) {
     outputPath = await input({
       message: 'Output database path:',
-      default: './results/eval.db',
+      default: `${DB_DIR}/eval.db`,
     })
   }
 
@@ -602,7 +602,7 @@ export const evaluateCommand = new Command('evaluate')
     const testSetPath = options.testSet as string
     const model = options.model as string
     const concurrency = options.concurrency ? Number.parseInt(options.concurrency, 10) : 5
-    const outputPath = (options.output as string) || './results/eval.db'
+    const outputPath = (options.output as string) || `${DB_DIR}/eval.db`
     const formatsStr = (options.formats as string) || 'ascii,adjacency'
     const apiKey = (options.apiKey as string) || process.env.OPENROUTER_API_KEY
     const dryRun = options.dryRun as boolean

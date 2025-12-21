@@ -2,94 +2,13 @@
  * CLI command for deleting evaluations from the database
  */
 
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { ExitPromptError } from '@inquirer/core'
 import { checkbox, confirm, select } from '@inquirer/prompts'
 import chalk from 'chalk'
 import { Command } from 'commander'
 import { closeDatabase, initDatabase } from '../db/client'
-
-interface RunSummary {
-  runId: string
-  model: string
-  format: string
-  count: number
-  outcomes: Record<string, number>
-  startedAt: string
-}
-
-function findDatabases(): string[] {
-  const resultsDir = './results'
-  if (!existsSync(resultsDir)) return []
-  return readdirSync(resultsDir)
-    .filter((f) => f.endsWith('.db'))
-    .map((f) => `${resultsDir}/${f}`)
-}
-
-function getRunSummaries(dbPath: string): RunSummary[] {
-  const db = initDatabase(dbPath)
-
-  // Get unique runs with their details
-  const query = db.query(`
-    SELECT
-      run_id,
-      model,
-      prompt_formats,
-      COUNT(*) as count,
-      MIN(started_at) as started_at
-    FROM evaluations
-    GROUP BY run_id
-    ORDER BY started_at DESC
-  `)
-  const rows = query.all() as Array<{
-    run_id: string
-    model: string
-    prompt_formats: string
-    count: number
-    started_at: string
-  }>
-
-  // Get outcome counts per run
-  const summaries: RunSummary[] = []
-  for (const row of rows) {
-    const outcomeQuery = db.query(`
-      SELECT outcome, COUNT(*) as count
-      FROM evaluations
-      WHERE run_id = ?
-      GROUP BY outcome
-    `)
-    const outcomeRows = outcomeQuery.all(row.run_id) as Array<{
-      outcome: string
-      count: number
-    }>
-
-    const outcomes: Record<string, number> = {}
-    for (const o of outcomeRows) {
-      outcomes[o.outcome] = o.count
-    }
-
-    // Parse prompt_formats JSON to get the format
-    let format = 'unknown'
-    try {
-      const formats = JSON.parse(row.prompt_formats) as string[]
-      format = formats[0] || 'unknown'
-    } catch {
-      // Ignore parse errors
-    }
-
-    summaries.push({
-      runId: row.run_id,
-      model: row.model,
-      format,
-      count: row.count,
-      outcomes,
-      startedAt: row.started_at,
-    })
-  }
-
-  closeDatabase()
-  return summaries
-}
+import { DB_DIR, findDatabases, getRunSummaries } from './utils'
 
 function deleteRuns(dbPath: string, runIds: string[]): number {
   const db = initDatabase(dbPath)
@@ -125,7 +44,7 @@ async function run() {
   // Find available databases
   const databases = findDatabases()
   if (databases.length === 0) {
-    console.error(chalk.red('No databases found in ./results/'))
+    console.error(chalk.red(`No databases found in ${DB_DIR}/`))
     process.exit(1)
   }
 
@@ -207,7 +126,7 @@ export const deleteCommand = new Command('delete')
   .action(async (options) => {
     // Non-interactive mode
     if (options.runId) {
-      const dbPath = options.database || './results/eval.db'
+      const dbPath = options.database || `${DB_DIR}/eval.db`
       if (!existsSync(dbPath)) {
         console.error(chalk.red(`Database not found: ${dbPath}`))
         process.exit(1)

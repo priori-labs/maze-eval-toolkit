@@ -2,13 +2,14 @@
  * CLI command for exporting evaluation results to JSON
  */
 
-import { existsSync, readdirSync, writeFileSync } from 'node:fs'
+import { writeFileSync } from 'node:fs'
 import { ExitPromptError } from '@inquirer/core'
 import { confirm, select } from '@inquirer/prompts'
 import chalk from 'chalk'
 import { Command } from 'commander'
 import type { Difficulty, EvaluationOutcome, PromptFormat } from '../core/types'
 import { closeDatabase, initDatabase } from '../db/client'
+import { DB_DIR, findDatabases } from './utils'
 
 /**
  * Evaluation data for the UI viewer
@@ -125,14 +126,6 @@ function condenseData(raw: VisualizerEvaluation[]): CondensedRecord[] {
   return results
 }
 
-function findDatabases(): string[] {
-  const resultsDir = './results'
-  if (!existsSync(resultsDir)) return []
-  return readdirSync(resultsDir)
-    .filter((f) => f.endsWith('.db'))
-    .map((f) => `${resultsDir}/${f}`)
-}
-
 interface TestSetInfo {
   id: string
   name: string
@@ -202,7 +195,7 @@ async function run() {
   // Find available databases
   const databases = findDatabases()
   if (databases.length === 0) {
-    console.error(chalk.red('No databases found in ./results/'))
+    console.error(chalk.red(`No databases found in ${DB_DIR}/`))
     console.error('Run `task evaluate` to create one')
     process.exit(1)
   }

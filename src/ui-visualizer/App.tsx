@@ -71,8 +71,11 @@ export default function App() {
     fetch('/api/results')
       .then((r) => r.json())
       .then((d: { files: string[] }) => {
-        // Filter to only JSON files
-        const jsonFiles = d.files.filter((f: string) => f.endsWith('.json'))
+        // Filter to only JSON files, excluding human evals and mini test sets
+        const jsonFiles = d.files.filter(
+          (f: string) =>
+            f.endsWith('.json') && !f.includes('human') && !f.includes('-mini'),
+        )
         setResultsFiles(jsonFiles)
 
         if (jsonFiles.includes('results.json')) {

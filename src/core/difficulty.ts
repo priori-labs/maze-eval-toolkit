@@ -250,9 +250,22 @@ export function getEffectiveBaseline(
 
   // Fall back to default difficulty-based baselines
   const reference = elite ? ELITE_HUMAN_BASELINE : HUMAN_BASELINE
+  const baseline = reference[difficulty]
+
+  // Guard against invalid difficulty values
+  if (!baseline) {
+    console.warn(`Unknown difficulty: ${difficulty}, falling back to 'medium'`)
+    const fallback = reference.medium
+    return {
+      timeSeconds: fallback.timeSeconds,
+      accuracy: fallback.accuracy,
+      source: 'default',
+    }
+  }
+
   return {
-    timeSeconds: reference[difficulty].timeSeconds,
-    accuracy: reference[difficulty].accuracy,
+    timeSeconds: baseline.timeSeconds,
+    accuracy: baseline.accuracy,
     source: 'default',
   }
 }

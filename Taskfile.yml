@@ -90,5 +90,5 @@ tasks:
   backup:
     desc: Backup the evaluation database
     cmds:
-      - cp results/eval.db "results/eval-$(date +%Y%m%d-%H%M%S).db"
+      - cp db/eval.db "db/eval-$(date +%Y%m%d-%H%M%S).db"
       - echo "Backup created"

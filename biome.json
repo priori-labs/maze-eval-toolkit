@@ -1,7 +1,14 @@
 {
   "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
   "files": {
-    "ignore": ["**/node_modules/**", "**/dist/**", "**/test-sets/**", "**/results/**", ".vscode/**"]
+    "ignore": [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/test-sets/**",
+      "**/results/**",
+      ".vscode/**",
+      "**/db/**"
+    ]
   },
   "organizeImports": {
     "enabled": true
