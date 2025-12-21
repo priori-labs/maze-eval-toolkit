@@ -34,6 +34,7 @@ interface EvaluateOptions {
   limit: number | null
   apiKey: string
   saveToDb: boolean
+  trials: number
 }
 
 // Common models for quick selection
@@ -111,7 +112,7 @@ async function promptForOptions(): Promise<EvaluateOptions> {
     choices: PROMPT_FORMATS.map((f) => ({
       name: f,
       value: f,
-      checked: f === 'ascii' || f === 'adjacency',
+      checked: f === 'edges_ascii',
     })),
     required: true,
     pageSize: PROMPT_FORMATS.length,
@@ -128,6 +129,18 @@ async function promptForOptions(): Promise<EvaluateOptions> {
     },
   })
   const concurrency = Number.parseInt(concurrencyStr, 10)
+
+  // Trials per maze
+  const trialsStr = await input({
+    message: 'Trials per maze:',
+    default: '1',
+    validate: (value) => {
+      const num = Number.parseInt(value, 10)
+      if (Number.isNaN(num) || num < 1) return 'Please enter a positive number'
+      return true
+    },
+  })
+  const trials = Number.parseInt(trialsStr, 10)
 
   // Save to database?
   const saveToDb = await confirm({
@@ -155,6 +168,7 @@ async function promptForOptions(): Promise<EvaluateOptions> {
   console.log(`  Model: ${model}`)
   console.log(`  Formats: ${formats.join(', ')}`)
   console.log(`  Concurrency: ${concurrency}`)
+  console.log(`  Trials per maze: ${trials}`)
   console.log(`  Save to DB: ${saveToDb ? 'Yes' : 'No'}`)
   if (saveToDb) {
     console.log(`  Output: ${outputPath}`)
@@ -180,6 +194,7 @@ async function promptForOptions(): Promise<EvaluateOptions> {
     limit: null,
     apiKey,
     saveToDb,
+    trials,
   }
 }
 
@@ -193,6 +208,7 @@ async function runEvaluation(options: EvaluateOptions) {
     limit: limitArg,
     apiKey,
     saveToDb,
+    trials,
   } = options
 
   // Load test set
@@ -225,9 +241,25 @@ async function runEvaluation(options: EvaluateOptions) {
   }
 
   // Apply limit if specified
-  const evaluationList = limitArg ? mazesToEvaluate.slice(0, limitArg) : mazesToEvaluate
+  const baseMazes = limitArg ? mazesToEvaluate.slice(0, limitArg) : mazesToEvaluate
 
-  console.log(`Mazes to evaluate: ${evaluationList.length}`)
+  // Expand with trials - create N entries per maze
+  const evaluationList: Array<{
+    maze: MazeWithPrompts
+    difficulty: Difficulty
+    trialNumber: number
+    totalTrials: number
+  }> = []
+  for (const { maze, difficulty } of baseMazes) {
+    for (let trial = 1; trial <= trials; trial++) {
+      evaluationList.push({ maze, difficulty, trialNumber: trial, totalTrials: trials })
+    }
+  }
+
+  console.log(`Mazes to evaluate: ${baseMazes.length}`)
+  console.log(
+    `Total evaluations: ${evaluationList.length} (${trials} trial${trials > 1 ? 's' : ''} per maze)`,
+  )
   console.log()
 
   // Initialize database (only if saving)
@@ -284,7 +316,7 @@ async function runEvaluation(options: EvaluateOptions) {
   // Evaluate each maze
   const total = evaluationList.length
   const totalStr = String(total)
-  const evaluationPromises = evaluationList.map(({ maze, difficulty }) =>
+  const evaluationPromises = evaluationList.map(({ maze, difficulty, trialNumber, totalTrials }) =>
     limit(async () => {
       // Generate prompt with selected formats
       const prompt = generatePrompt(maze, formats, maze.specialInstructions)
@@ -391,6 +423,8 @@ async function runEvaluation(options: EvaluateOptions) {
           solutionLength: validation?.pathLength ?? null,
           shortestPath: maze.shortestPath,
           efficiency: validation?.efficiency ?? null,
+          trialNumber,
+          totalTrials,
         })
 
         // Track cost and inference time
@@ -407,6 +441,7 @@ async function runEvaluation(options: EvaluateOptions) {
 
         // Log result
         const prefix = `[${String(completed).padStart(totalStr.length)}/${totalStr}]`
+        const trialStr = totalTrials > 1 ? chalk.dim(` #${trialNumber}`) : ''
         const outcomeColor =
           outcome === 'success'
             ? chalk.green
@@ -425,7 +460,7 @@ async function runEvaluation(options: EvaluateOptions) {
           ? `${response.parsedMoves.length} steps (shortest = ${maze.shortestPath})`
           : '-'
         log(
-          `${prefix} ${difficulty.padEnd(10)} ${timeStr}  ${costStr.padStart(
+          `${prefix} ${difficulty.padEnd(10)}${trialStr} ${timeStr}  ${costStr.padStart(
             8,
           )}  ${tokensStr}  ${outcomeColor(outcome.padEnd(12))} ${stepsStr}`,
         )
@@ -466,6 +501,8 @@ async function runEvaluation(options: EvaluateOptions) {
           solutionLength: null,
           shortestPath: maze.shortestPath,
           efficiency: null,
+          trialNumber,
+          totalTrials,
         })
 
         apiErrors++
@@ -482,9 +519,10 @@ async function runEvaluation(options: EvaluateOptions) {
 
         // Log error
         const prefix = `[${String(completed).padStart(totalStr.length)}/${totalStr}]`
+        const trialStr = totalTrials > 1 ? chalk.dim(` #${trialNumber}`) : ''
         const errTimeStr = `${(errorInferenceTime / 1000).toFixed(1)}s`.padStart(7)
         log(
-          `${prefix} ${difficulty.padEnd(10)} ${errTimeStr}  ${'-'.padStart(
+          `${prefix} ${difficulty.padEnd(10)}${trialStr} ${errTimeStr}  ${'-'.padStart(
             8,
           )}  ${'-'.padStart(12)}  ${chalk.red('api_error'.padEnd(12))} ${errorMsg}`,
         )
@@ -539,6 +577,7 @@ export const evaluateCommand = new Command('evaluate')
   .option('-k, --api-key <key>', 'OpenRouter API key (or set OPENROUTER_API_KEY)')
   .option('--dry-run', 'Parse test set without making API calls')
   .option('--limit <number>', 'Limit number of mazes to evaluate')
+  .option('--trials <number>', 'Number of trials per maze (default: 1)')
   .option('-i, --interactive', 'Run in interactive mode (default if no options provided)')
   .action(async (options) => {
     // Determine if we should run interactive mode
@@ -568,6 +607,7 @@ export const evaluateCommand = new Command('evaluate')
     const apiKey = (options.apiKey as string) || process.env.OPENROUTER_API_KEY
     const dryRun = options.dryRun as boolean
     const limitArg = options.limit ? Number.parseInt(options.limit, 10) : null
+    const trials = options.trials ? Number.parseInt(options.trials, 10) : 1
 
     // Validate required options in non-interactive mode
     if (!testSetPath) {
@@ -601,6 +641,7 @@ export const evaluateCommand = new Command('evaluate')
     console.log(`Test Set: ${testSetPath}`)
     console.log(`Formats: ${formats.join(', ')}`)
     console.log(`Concurrency: ${concurrency}`)
+    console.log(`Trials per maze: ${trials}`)
     console.log(`Output: ${outputPath}`)
     if (dryRun) console.log(chalk.yellow('DRY RUN - No API calls will be made'))
     console.log()
@@ -621,10 +662,14 @@ export const evaluateCommand = new Command('evaluate')
       const evaluationList = limitArg ? mazesToEvaluate.slice(0, limitArg) : mazesToEvaluate
 
       console.log(chalk.yellow('Dry run complete. Would evaluate:'))
+      console.log(`  Trials per maze: ${trials}`)
       for (const difficulty of DIFFICULTIES) {
         const count = evaluationList.filter((m) => m.difficulty === difficulty).length
         if (count > 0) {
-          console.log(`  ${difficulty}: ${count}`)
+          const totalEvals = count * trials
+          console.log(
+            `  ${difficulty}: ${count} mazes${trials > 1 ? ` x ${trials} trials = ${totalEvals} evaluations` : ''}`,
+          )
         }
       }
       return
@@ -639,5 +684,6 @@ export const evaluateCommand = new Command('evaluate')
       limit: limitArg,
       apiKey: apiKey!,
       saveToDb: true, // Always save in non-interactive mode
+      trials,
     })
   })

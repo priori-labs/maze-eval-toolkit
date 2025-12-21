@@ -160,6 +160,22 @@ export interface MazeStats {
 }
 
 /**
+ * Custom human baseline configuration for a test set
+ */
+export interface CustomHumanBaseline {
+  timeSeconds: number
+  accuracy: number
+}
+
+/**
+ * Human baselines for a test set (average and optional elite)
+ */
+export interface TestSetHumanBaselines {
+  average: CustomHumanBaseline
+  elite?: CustomHumanBaseline
+}
+
+/**
  * Test set file format
  */
 export interface TestSetFile {
@@ -172,6 +188,7 @@ export interface TestSetFile {
     totalMazes: number
     byDifficulty: Record<Difficulty, number>
   }
+  humanBaselines?: TestSetHumanBaselines
 }
 
 /**
@@ -233,6 +250,10 @@ export interface EvaluationResult {
 
   // Human evaluation flag
   isHuman: boolean
+
+  // Trial tracking (for repeated evaluations)
+  trialNumber?: number
+  totalTrials?: number
 }
 
 /**

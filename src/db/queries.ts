@@ -52,6 +52,8 @@ export function insertEvaluation(db: Database, result: EvaluationResult): void {
     result.shortestPath,
     result.efficiency,
     result.isHuman ? 1 : 0,
+    result.trialNumber ?? null,
+    result.totalTrials ?? null,
   )
 }
 
@@ -85,6 +87,8 @@ interface EvaluationRow {
   shortest_path: number
   efficiency: number | null
   is_human: number
+  trial_number: number | null
+  total_trials: number | null
 }
 
 /**
@@ -118,6 +122,8 @@ function rowToResult(row: EvaluationRow): EvaluationResult {
     shortestPath: row.shortest_path,
     efficiency: row.efficiency,
     isHuman: row.is_human === 1,
+    trialNumber: row.trial_number ?? undefined,
+    totalTrials: row.total_trials ?? undefined,
   }
 }
 

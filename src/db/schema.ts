@@ -46,7 +46,11 @@ CREATE TABLE IF NOT EXISTS evaluations (
   efficiency REAL,
 
   -- Human evaluation flag
-  is_human INTEGER NOT NULL DEFAULT 0
+  is_human INTEGER NOT NULL DEFAULT 0,
+
+  -- Trial tracking (for repeated evaluations)
+  trial_number INTEGER,
+  total_trials INTEGER
 );
 `
 
@@ -75,7 +79,7 @@ INSERT INTO evaluations (
   raw_response, parsed_moves, reasoning,
   outcome, moves_executed, final_position,
   solution_length, shortest_path, efficiency,
-  is_human
+  is_human, trial_number, total_trials
 ) VALUES (
   ?, ?, ?, ?, ?, ?, ?,
   ?, ?, ?, ?,
@@ -84,7 +88,7 @@ INSERT INTO evaluations (
   ?, ?, ?,
   ?, ?, ?,
   ?, ?, ?,
-  ?
+  ?, ?, ?
 )
 `
 

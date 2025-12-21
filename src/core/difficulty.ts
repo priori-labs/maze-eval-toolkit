@@ -2,7 +2,7 @@
  * Difficulty level configurations
  */
 
-import type { Difficulty, DifficultyConfig, SpineFirstConfig } from './types'
+import type { Difficulty, DifficultyConfig, SpineFirstConfig, TestSetHumanBaselines } from './types'
 
 /**
  * Settings for each difficulty level
@@ -203,3 +203,56 @@ export const ELITE_HUMAN_BASELINE: Record<Difficulty, HumanBaselineConfig> = {
  */
 export const HUMAN_BRAIN_WATTS = 20
 export const LLM_GPU_WATTS = 2000
+
+/**
+ * Effective baseline with source information
+ */
+export interface EffectiveBaseline {
+  timeSeconds: number
+  accuracy: number
+  source: 'custom' | 'default'
+}
+
+/**
+ * Get the effective baseline for scoring, with fallback logic
+ *
+ * Priority:
+ * 1. Custom baseline (if test set has one)
+ * 2. Default difficulty-based baseline
+ *
+ * For elite mode:
+ * - Uses custom elite if available
+ * - Falls back to custom average if only average is provided
+ * - Falls back to default elite if no custom baselines
+ */
+export function getEffectiveBaseline(
+  difficulty: Difficulty,
+  customBaselines: TestSetHumanBaselines | undefined,
+  elite: boolean,
+): EffectiveBaseline {
+  // If custom baselines exist
+  if (customBaselines) {
+    if (elite) {
+      // Prefer elite, fall back to average
+      const baseline = customBaselines.elite ?? customBaselines.average
+      return {
+        timeSeconds: baseline.timeSeconds,
+        accuracy: baseline.accuracy,
+        source: 'custom',
+      }
+    }
+    return {
+      timeSeconds: customBaselines.average.timeSeconds,
+      accuracy: customBaselines.average.accuracy,
+      source: 'custom',
+    }
+  }
+
+  // Fall back to default difficulty-based baselines
+  const reference = elite ? ELITE_HUMAN_BASELINE : HUMAN_BASELINE
+  return {
+    timeSeconds: reference[difficulty].timeSeconds,
+    accuracy: reference[difficulty].accuracy,
+    source: 'default',
+  }
+}

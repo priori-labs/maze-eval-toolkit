@@ -27,6 +27,19 @@ export function initDatabase(dbPath: string): Database {
   db.run(CREATE_EVALUATIONS_TABLE)
   db.run(CREATE_INDEXES)
 
+  // Migrate existing databases - add trial columns if they don't exist
+  // This is safe: ALTER TABLE ADD COLUMN preserves existing data
+  try {
+    db.run('ALTER TABLE evaluations ADD COLUMN trial_number INTEGER')
+  } catch {
+    // Column already exists, ignore
+  }
+  try {
+    db.run('ALTER TABLE evaluations ADD COLUMN total_trials INTEGER')
+  } catch {
+    // Column already exists, ignore
+  }
+
   return db
 }
 

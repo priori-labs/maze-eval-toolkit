@@ -56,12 +56,19 @@ function validateDifficulty(diff: string): Difficulty {
 }
 
 function processInputMaze(inputMaze: InputMaze): GeneratedMaze {
-  // Validate and compute shortest path
+  // Validate maze is solvable via BFS
   const stats = solveMaze(inputMaze.grid, inputMaze.start, inputMaze.goal)
 
   if (stats.shortestPath <= 0) {
     throw new Error('Maze is unsolvable or invalid')
   }
+
+  // Use recorded optimal path length if available, otherwise fall back to BFS
+  // The user's shortestPathPlaythrough is their verified optimal solution
+  const shortestPath =
+    inputMaze.shortestPathPlaythrough && inputMaze.shortestPathPlaythrough.length > 0
+      ? inputMaze.shortestPathPlaythrough.length
+      : stats.shortestPath
 
   return {
     id: uuidv4(),
@@ -71,7 +78,7 @@ function processInputMaze(inputMaze: InputMaze): GeneratedMaze {
     grid: inputMaze.grid,
     start: inputMaze.start,
     goal: inputMaze.goal,
-    shortestPath: stats.shortestPath,
+    shortestPath,
     generatedAt: new Date().toISOString(),
     // Constraint fields
     requirementType: inputMaze.requirementType,

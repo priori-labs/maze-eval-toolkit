@@ -22,6 +22,7 @@ import { importCommand } from './import'
 import { promptDemoCommand } from './prompt-demo'
 import { retryCommand } from './retry'
 import { scoreCommand } from './score'
+import { setBaselineCommand } from './set-baseline'
 import { uiCommand } from './ui'
 
 program.name('lmiq').description('LMIQ v1 Beta - AI Maze Solving Benchmark').version('0.1.0')
@@ -30,6 +31,7 @@ program.addCommand(generateCommand)
 program.addCommand(importCommand)
 program.addCommand(evaluateCommand)
 program.addCommand(scoreCommand)
+program.addCommand(setBaselineCommand)
 program.addCommand(exportCommand)
 program.addCommand(deleteCommand)
 program.addCommand(retryCommand)

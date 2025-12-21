@@ -26,6 +26,11 @@ tasks:
     cmds:
       - bun run src/cli/index.ts score {{.CLI_ARGS}}
 
+  baseline:
+    desc: Set custom human baselines for a test set
+    cmds:
+      - bun run src/cli/index.ts set-baseline {{.CLI_ARGS}}
+
   prompt-demo:
     desc: Generate a prompt for inspection
     cmds:

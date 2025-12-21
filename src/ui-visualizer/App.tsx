@@ -1,4 +1,5 @@
-import type { Difficulty, EvaluationResult } from '@/core/types'
+import { getEffectiveBaseline } from '@/core/difficulty'
+import type { Difficulty, EvaluationResult, TestSetHumanBaselines } from '@/core/types'
 import { DIFFICULTIES } from '@/core/types'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AccuracyChart } from './components/charts/AccuracyChart'
@@ -6,8 +7,6 @@ import { EnergyEfficiencyChart } from './components/charts/EnergyEfficiencyChart
 import { LMIQChart } from './components/charts/LMIQChart'
 import { TimeEfficiencyChart } from './components/charts/TimeEfficiencyChart'
 import {
-  ELITE_HUMAN_REFERENCE,
-  HUMAN_REFERENCE,
   aggregateByModelAndFormat,
   computeHumanBaseline,
   findBestModel,
@@ -25,12 +24,16 @@ export default function App() {
   const [difficultyFilter, setDifficultyFilter] = useState<Difficulty | 'all'>('all')
   const [resultsFiles, setResultsFiles] = useState<string[]>([])
   const [selectedResultsFile, setSelectedResultsFile] = useState<string>('')
+  const [customBaselines, setCustomBaselines] = useState<TestSetHumanBaselines | undefined>(
+    undefined,
+  )
 
   // Load results file
   const loadResults = useCallback(async (filename: string) => {
     setLoading(true)
     setError(null)
     setSelectedResultsFile(filename)
+    setCustomBaselines(undefined)
 
     try {
       const response = await fetch(`/api/results/${filename}`)
@@ -39,6 +42,22 @@ export default function App() {
       // Filter out excluded models
       const filtered = data.filter((r) => !EXCLUDED_MODELS.includes(getShortModelName(r.model)))
       setResults(filtered)
+
+      // Try to load custom baselines from test set
+      const testSetIds = [...new Set(filtered.map((r) => r.testSetId))]
+      if (testSetIds.length === 1 && testSetIds[0]) {
+        try {
+          const testSetResponse = await fetch(`/api/test-sets/${testSetIds[0]}`)
+          if (testSetResponse.ok) {
+            const testSetData = await testSetResponse.json()
+            if (testSetData.humanBaselines) {
+              setCustomBaselines(testSetData.humanBaselines)
+            }
+          }
+        } catch {
+          // Silently ignore - custom baselines are optional
+        }
+      }
     } catch (err) {
       setError(`Failed to load results: ${err}`)
       setResults([])
@@ -80,22 +99,22 @@ export default function App() {
   // Compute model+format scores (for metric charts)
   const modelFormatScores = useMemo(() => {
     if (filteredResults.length === 0) return []
-    return aggregateByModelAndFormat(filteredResults, useElite)
-  }, [filteredResults, useElite])
+    return aggregateByModelAndFormat(filteredResults, useElite, customBaselines)
+  }, [filteredResults, useElite, customBaselines])
 
   // Compute human baseline (for charts - based on toggle)
   const humanBaseline = useMemo(() => {
-    return computeHumanBaseline(filteredResults, useElite)
-  }, [filteredResults, useElite])
+    return computeHumanBaseline(filteredResults, useElite, customBaselines)
+  }, [filteredResults, useElite, customBaselines])
 
   // Compute both human baselines for reference card
   const humanBaselineAvg = useMemo(() => {
-    return computeHumanBaseline(filteredResults, false)
-  }, [filteredResults])
+    return computeHumanBaseline(filteredResults, false, customBaselines)
+  }, [filteredResults, customBaselines])
 
   const humanBaselineElite = useMemo(() => {
-    return computeHumanBaseline(filteredResults, true)
-  }, [filteredResults])
+    return computeHumanBaseline(filteredResults, true, customBaselines)
+  }, [filteredResults, customBaselines])
 
   // Compute weighted average times based on difficulty distribution
   const humanTimes = useMemo(() => {
@@ -109,12 +128,13 @@ export default function App() {
     let eliteTime = 0
     for (const [diff, count] of Object.entries(difficultyCount)) {
       const weight = count / total
-      avgTime += weight * HUMAN_REFERENCE[diff as keyof typeof HUMAN_REFERENCE].timeSeconds
-      eliteTime +=
-        weight * ELITE_HUMAN_REFERENCE[diff as keyof typeof ELITE_HUMAN_REFERENCE].timeSeconds
+      const avgBaseline = getEffectiveBaseline(diff as Difficulty, customBaselines, false)
+      const eliteBaseline = getEffectiveBaseline(diff as Difficulty, customBaselines, true)
+      avgTime += weight * avgBaseline.timeSeconds
+      eliteTime += weight * eliteBaseline.timeSeconds
     }
     return { avg: avgTime, elite: eliteTime }
-  }, [filteredResults])
+  }, [filteredResults, customBaselines])
 
   // Find best models for summary stats
   const bestAccuracy = useMemo(
@@ -221,7 +241,14 @@ export default function App() {
                 </div>
               </div>
               <div className="bg-card rounded-lg p-4 border border-border">
-                <div className="text-muted-foreground text-sm">Human Baseline Reference</div>
+                <div className="text-muted-foreground text-sm flex items-center gap-2">
+                  Human Baseline Reference
+                  {customBaselines && (
+                    <span className="text-xs bg-cyan-500/20 text-cyan-400 px-1.5 py-0.5 rounded">
+                      Custom
+                    </span>
+                  )}
+                </div>
                 <div className="text-sm mt-2 space-y-1">
                   <div>
                     <span className="text-blue-400">Average Human:</span>{' '}

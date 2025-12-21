@@ -61,7 +61,12 @@ export default function ModelSummary({
               }`}
             >
               <div className="flex justify-between items-center gap-2">
-                <span className="font-mono text-xs truncate flex-1">{result.model}</span>
+                <span className="font-mono text-xs truncate flex-1">
+                  {result.model}
+                  {result.totalTrials && result.totalTrials > 1 && (
+                    <span className="text-muted-foreground"> #{result.trialNumber}</span>
+                  )}
+                </span>
                 <Badge
                   variant="outline"
                   className={`text-xs px-1.5 py-0 ${

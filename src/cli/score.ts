@@ -2,23 +2,42 @@
  * CLI command for computing LMIQ scores from evaluation results
  */
 
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { ExitPromptError } from '@inquirer/core'
 import { checkbox, select } from '@inquirer/prompts'
 import chalk from 'chalk'
 import { Command } from 'commander'
-import {
-  DIFFICULTIES,
-  ELITE_HUMAN_BASELINE,
-  HUMAN_BASELINE,
-  HUMAN_BRAIN_WATTS,
-  LLM_GPU_WATTS,
-} from '../core'
-import type { Difficulty, EvaluationResult } from '../core/types'
+import { DIFFICULTIES, HUMAN_BRAIN_WATTS, LLM_GPU_WATTS, getEffectiveBaseline } from '../core'
+import type {
+  Difficulty,
+  EvaluationResult,
+  TestSetFile,
+  TestSetHumanBaselines,
+} from '../core/types'
 import { closeDatabase, initDatabase } from '../db/client'
 import { formatDuration } from './utils'
 
-// Human baseline constants imported from @/core/difficulty
+/**
+ * Load custom baselines from a test set file by test set ID
+ */
+function loadTestSetBaselines(testSetId: string): TestSetHumanBaselines | undefined {
+  const testSetsDir = './test-sets'
+  if (!existsSync(testSetsDir)) return undefined
+
+  const files = readdirSync(testSetsDir).filter((f) => f.endsWith('.json'))
+  for (const file of files) {
+    try {
+      const content = readFileSync(`${testSetsDir}/${file}`, 'utf-8')
+      const testSet = JSON.parse(content) as TestSetFile
+      if (testSet.id === testSetId) {
+        return testSet.humanBaselines
+      }
+    } catch {
+      // Ignore invalid files
+    }
+  }
+  return undefined
+}
 
 interface ScoreOptions {
   databasePath: string
@@ -149,7 +168,10 @@ function getRunsForModel(evaluations: EvaluationResult[], model: string): RunInf
 /**
  * Compute scores for a set of evaluations
  */
-function computeScores(evaluations: EvaluationResult[]): OverallScores {
+function computeScores(
+  evaluations: EvaluationResult[],
+  customBaselines?: TestSetHumanBaselines,
+): OverallScores {
   const byDifficulty: Record<Difficulty, DifficultyScores> = {} as any
 
   // Initialize per-difficulty scores
@@ -172,8 +194,10 @@ function computeScores(evaluations: EvaluationResult[]): OverallScores {
     }
 
     const successes = diffEvals.filter((e) => e.outcome === 'success')
-    const humanTimeMs = HUMAN_BASELINE[difficulty].timeSeconds * 1000
-    const eliteTimeMs = ELITE_HUMAN_BASELINE[difficulty].timeSeconds * 1000
+    const humanBaseline = getEffectiveBaseline(difficulty, customBaselines, false)
+    const eliteBaseline = getEffectiveBaseline(difficulty, customBaselines, true)
+    const humanTimeMs = humanBaseline.timeSeconds * 1000
+    const eliteTimeMs = eliteBaseline.timeSeconds * 1000
 
     // Path efficiency for successes
     const pathEfficiencies = successes
@@ -256,8 +280,10 @@ function computeScores(evaluations: EvaluationResult[]): OverallScores {
   let timeEfficiencyCount = 0
   for (const e of evaluations) {
     if (e.outcome === 'success') {
-      const humanTimeMs = HUMAN_BASELINE[e.difficulty].timeSeconds * 1000
-      const eliteTimeMs = ELITE_HUMAN_BASELINE[e.difficulty].timeSeconds * 1000
+      const humanBaseline = getEffectiveBaseline(e.difficulty, customBaselines, false)
+      const eliteBaseline = getEffectiveBaseline(e.difficulty, customBaselines, true)
+      const humanTimeMs = humanBaseline.timeSeconds * 1000
+      const eliteTimeMs = eliteBaseline.timeSeconds * 1000
       totalTimeEfficiency += Math.min(humanTimeMs / e.inferenceTimeMs, 1.0)
       totalTimeEfficiencyElite += Math.min(eliteTimeMs / e.inferenceTimeMs, 1.0)
     }
@@ -272,8 +298,10 @@ function computeScores(evaluations: EvaluationResult[]): OverallScores {
   let totalLmiq = 0
   let totalLmiqElite = 0
   for (const e of evaluations) {
-    const humanTimeMs = HUMAN_BASELINE[e.difficulty].timeSeconds * 1000
-    const eliteTimeMs = ELITE_HUMAN_BASELINE[e.difficulty].timeSeconds * 1000
+    const humanBaseline = getEffectiveBaseline(e.difficulty, customBaselines, false)
+    const eliteBaseline = getEffectiveBaseline(e.difficulty, customBaselines, true)
+    const humanTimeMs = humanBaseline.timeSeconds * 1000
+    const eliteTimeMs = eliteBaseline.timeSeconds * 1000
     const timeEff = Math.min(humanTimeMs / e.inferenceTimeMs, 1.0)
     const timeEffElite = Math.min(eliteTimeMs / e.inferenceTimeMs, 1.0)
     const pathEff = e.outcome === 'success' && e.efficiency !== null ? e.efficiency : 0
@@ -290,10 +318,10 @@ function computeScores(evaluations: EvaluationResult[]): OverallScores {
   let eliteHumanJoules = 0
   let llmJoules = 0
   for (const e of evaluations) {
-    const humanTimeSeconds = HUMAN_BASELINE[e.difficulty].timeSeconds
-    const eliteTimeSeconds = ELITE_HUMAN_BASELINE[e.difficulty].timeSeconds
-    humanJoules += humanTimeSeconds * HUMAN_BRAIN_WATTS
-    eliteHumanJoules += eliteTimeSeconds * HUMAN_BRAIN_WATTS
+    const humanBaseline = getEffectiveBaseline(e.difficulty, customBaselines, false)
+    const eliteBaseline = getEffectiveBaseline(e.difficulty, customBaselines, true)
+    humanJoules += humanBaseline.timeSeconds * HUMAN_BRAIN_WATTS
+    eliteHumanJoules += eliteBaseline.timeSeconds * HUMAN_BRAIN_WATTS
     llmJoules += (e.inferenceTimeMs / 1000) * LLM_GPU_WATTS
   }
   const energyEfficiency = llmJoules > 0 ? humanJoules / llmJoules : 0
@@ -342,9 +370,16 @@ function pct(value: number): string {
 /**
  * Print score card
  */
-function printScoreCard(modelName: string, scores: OverallScores): void {
+function printScoreCard(
+  modelName: string,
+  scores: OverallScores,
+  customBaselines?: TestSetHumanBaselines,
+): void {
   const avgHumanAccuracy =
-    DIFFICULTIES.reduce((a, d) => a + HUMAN_BASELINE[d].accuracy, 0) / DIFFICULTIES.length
+    DIFFICULTIES.reduce((a, d) => {
+      const baseline = getEffectiveBaseline(d, customBaselines, false)
+      return a + baseline.accuracy
+    }, 0) / DIFFICULTIES.length
 
   console.log()
   console.log(
@@ -401,7 +436,7 @@ function printScoreCard(modelName: string, scores: OverallScores): void {
     const ds = scores.byDifficulty[difficulty]
     if (ds.total === 0) continue
 
-    const humanRef = HUMAN_BASELINE[difficulty]
+    const humanRef = getEffectiveBaseline(difficulty, customBaselines, false)
     const accStr = pct(ds.accuracy)
     const totalTimeSeconds = (ds.avgInferenceTimeMs * ds.total) / 1000
     const timeStr = formatDuration(totalTimeSeconds)
@@ -533,10 +568,16 @@ function printHumanScoreCard(runName: string, evaluations: EvaluationResult[]): 
 /**
  * Print summary scores for all models and all runs
  */
-function printAllModelsSummary(evaluations: EvaluationResult[]): void {
+function printAllModelsSummary(
+  evaluations: EvaluationResult[],
+  customBaselines?: TestSetHumanBaselines,
+): void {
   const models = getUniqueModels(evaluations)
   const avgHumanAccuracy =
-    DIFFICULTIES.reduce((a, d) => a + HUMAN_BASELINE[d].accuracy, 0) / DIFFICULTIES.length
+    DIFFICULTIES.reduce((a, d) => {
+      const baseline = getEffectiveBaseline(d, customBaselines, false)
+      return a + baseline.accuracy
+    }, 0) / DIFFICULTIES.length
 
   console.log()
   console.log(chalk.bold('LMIQ Score Summary'))
@@ -569,7 +610,7 @@ function printAllModelsSummary(evaluations: EvaluationResult[]): void {
     // Compute scores for all runs and sort by accuracy (highest first)
     const runsWithScores = runs.map((run) => {
       const runEvals = evaluations.filter((e) => e.runId === run.runId)
-      return { run, scores: computeScores(runEvals) }
+      return { run, scores: computeScores(runEvals, customBaselines) }
     })
     runsWithScores.sort((a, b) => b.scores.accuracy - a.scores.accuracy)
 
@@ -730,9 +771,19 @@ async function runScoring(options: ScoreOptions): Promise<void> {
     return
   }
 
+  // Load custom baselines from test set (if evaluations have a consistent testSetId)
+  let customBaselines: TestSetHumanBaselines | undefined
+  const testSetIds = [...new Set(evaluations.map((e) => e.testSetId))]
+  if (testSetIds.length === 1 && testSetIds[0]) {
+    customBaselines = loadTestSetBaselines(testSetIds[0])
+    if (customBaselines) {
+      console.log(chalk.cyan('Using custom human baselines for this test set'))
+    }
+  }
+
   // If no models specified, show summary for all models
   if (!models || models.length === 0) {
-    printAllModelsSummary(evaluations)
+    printAllModelsSummary(evaluations, customBaselines)
     return
   }
 
@@ -751,7 +802,7 @@ async function runScoring(options: ScoreOptions): Promise<void> {
 
   // If multiple models selected, use summary view
   if (models.length > 1) {
-    printAllModelsSummary(evaluations)
+    printAllModelsSummary(evaluations, customBaselines)
     return
   }
 
@@ -766,8 +817,8 @@ async function runScoring(options: ScoreOptions): Promise<void> {
     const runName = model.startsWith('human/') ? model.slice(6) : model
     printHumanScoreCard(runName, evaluations)
   } else {
-    const scores = computeScores(evaluations)
-    printScoreCard(model, scores)
+    const scores = computeScores(evaluations, customBaselines)
+    printScoreCard(model, scores, customBaselines)
   }
 }
 

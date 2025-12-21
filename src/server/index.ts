@@ -73,6 +73,26 @@ app.get('/api/results/:filename', async (c) => {
   }
 })
 
+// Serve test set by ID (searches all test set files for matching ID)
+app.get('/api/test-sets/:testSetId', async (c) => {
+  const testSetId = c.req.param('testSetId')
+
+  try {
+    const files = await listJsonFiles(DATA_DIR)
+    for (const filename of files) {
+      const filepath = join(DATA_DIR, filename)
+      const content = await readFile(filepath, 'utf-8')
+      const testSet = JSON.parse(content)
+      if (testSet.id === testSetId) {
+        return c.json(testSet)
+      }
+    }
+    return c.json({ error: 'Test set not found' }, 404)
+  } catch {
+    return c.json({ error: 'Failed to load test sets' }, 500)
+  }
+})
+
 // Human evaluation result from frontend
 interface HumanMazeResult {
   mazeId: string

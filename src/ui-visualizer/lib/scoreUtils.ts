@@ -7,8 +7,15 @@ import {
   HUMAN_BASELINE,
   HUMAN_BRAIN_WATTS,
   LLM_GPU_WATTS,
+  getEffectiveBaseline,
 } from '@/core/difficulty'
-import type { Difficulty, EvaluationOutcome, EvaluationResult, PromptFormat } from '@/core/types'
+import type {
+  Difficulty,
+  EvaluationOutcome,
+  EvaluationResult,
+  PromptFormat,
+  TestSetHumanBaselines,
+} from '@/core/types'
 
 // Re-export for consumers that import from here
 export { ELITE_HUMAN_BASELINE as ELITE_HUMAN_REFERENCE, HUMAN_BASELINE as HUMAN_REFERENCE }
@@ -82,7 +89,10 @@ export function getShortModelName(fullName: string): string {
 /**
  * Compute scores for a set of evaluations
  */
-export function computeModelScores(evaluations: EvaluationResult[]): ModelScore {
+export function computeModelScores(
+  evaluations: EvaluationResult[],
+  customBaselines?: TestSetHumanBaselines,
+): ModelScore {
   const model = evaluations[0]?.model || 'unknown'
   const total = evaluations.length
   const successes = evaluations.filter((e) => e.outcome === 'success')
@@ -103,8 +113,10 @@ export function computeModelScores(evaluations: EvaluationResult[]): ModelScore 
   let totalHumanTimeMsElite = 0
 
   for (const e of evaluations) {
-    const humanTimeMs = HUMAN_BASELINE[e.difficulty].timeSeconds * 1000
-    const eliteTimeMs = ELITE_HUMAN_BASELINE[e.difficulty].timeSeconds * 1000
+    const humanBaseline = getEffectiveBaseline(e.difficulty, customBaselines, false)
+    const eliteBaseline = getEffectiveBaseline(e.difficulty, customBaselines, true)
+    const humanTimeMs = humanBaseline.timeSeconds * 1000
+    const eliteTimeMs = eliteBaseline.timeSeconds * 1000
     totalHumanTimeMs += humanTimeMs
     totalHumanTimeMsElite += eliteTimeMs
 
@@ -162,7 +174,10 @@ export function computeModelScores(evaluations: EvaluationResult[]): ModelScore 
 /**
  * Aggregate all results by model
  */
-export function aggregateByModel(results: EvaluationResult[]): ModelScore[] {
+export function aggregateByModel(
+  results: EvaluationResult[],
+  customBaselines?: TestSetHumanBaselines,
+): ModelScore[] {
   const byModel = new Map<string, EvaluationResult[]>()
 
   for (const result of results) {
@@ -173,7 +188,7 @@ export function aggregateByModel(results: EvaluationResult[]): ModelScore[] {
 
   const scores: ModelScore[] = []
   for (const [_, evaluations] of byModel) {
-    scores.push(computeModelScores(evaluations))
+    scores.push(computeModelScores(evaluations, customBaselines))
   }
 
   // Sort by accuracy descending
@@ -282,8 +297,8 @@ export function computeModelFormatScores(
   evaluations: EvaluationResult[],
   format: PromptFormat,
   elite = false,
+  customBaselines?: TestSetHumanBaselines,
 ): ModelFormatScore {
-  const reference = elite ? ELITE_HUMAN_BASELINE : HUMAN_BASELINE
   const model = evaluations[0]?.model || 'unknown'
   const total = evaluations.length
   const successes = evaluations.filter((e) => e.outcome === 'success')
@@ -301,7 +316,8 @@ export function computeModelFormatScores(
   let totalHumanTimeMs = 0
 
   for (const e of evaluations) {
-    const humanTimeMs = reference[e.difficulty].timeSeconds * 1000
+    const baseline = getEffectiveBaseline(e.difficulty, customBaselines, elite)
+    const humanTimeMs = baseline.timeSeconds * 1000
     totalHumanTimeMs += humanTimeMs
 
     if (e.outcome === 'success') {
@@ -373,6 +389,7 @@ function getEffectiveFormat(promptFormats: PromptFormat[]): PromptFormat | null 
 export function aggregateByModelAndFormat(
   results: EvaluationResult[],
   elite = false,
+  customBaselines?: TestSetHumanBaselines,
 ): ModelWithFormats[] {
   // Group by model, then by format
   const byModelFormat = new Map<string, Map<PromptFormat, EvaluationResult[]>>()
@@ -397,7 +414,7 @@ export function aggregateByModelAndFormat(
   for (const [model, formatMap] of byModelFormat) {
     const formats: ModelFormatScore[] = []
     for (const [format, evals] of formatMap) {
-      formats.push(computeModelFormatScores(evals, format, elite))
+      formats.push(computeModelFormatScores(evals, format, elite, customBaselines))
     }
     // Sort formats by fixed order
     formats.sort((a, b) => {
@@ -426,9 +443,11 @@ export function aggregateByModelAndFormat(
  * Compute human baseline scores based on reference values
  * Human by definition has 100% time efficiency and path efficiency
  */
-export function computeHumanBaseline(results: EvaluationResult[], elite = false): HumanBaseline {
-  const reference = elite ? ELITE_HUMAN_BASELINE : HUMAN_BASELINE
-
+export function computeHumanBaseline(
+  results: EvaluationResult[],
+  elite = false,
+  customBaselines?: TestSetHumanBaselines,
+): HumanBaseline {
   // Weighted average of human accuracy by difficulty distribution in results
   const difficultyCount: Record<Difficulty, number> = {
     simple: 0,
@@ -452,7 +471,8 @@ export function computeHumanBaseline(results: EvaluationResult[], elite = false)
   for (const diff of Object.keys(difficultyCount) as Difficulty[]) {
     const count = difficultyCount[diff]
     if (count > 0) {
-      weightedAccuracy += (count / total) * reference[diff].accuracy
+      const baseline = getEffectiveBaseline(diff, customBaselines, elite)
+      weightedAccuracy += (count / total) * baseline.accuracy
     }
   }
 
