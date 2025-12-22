@@ -3,21 +3,19 @@
  */
 
 import { describe, expect, test } from 'bun:test'
-import { HUMAN_BRAIN_WATTS, HUMAN_BASELINE, LLM_GPU_WATTS } from '../difficulty'
+import { HUMAN_BASELINE, HUMAN_BRAIN_WATTS, LLM_GPU_WATTS } from '../difficulty'
 import {
+  type ScoringEvaluation,
   computeHumanEnergy,
   computeLlmEnergy,
   computeLmiq,
   computeScores,
   computeScoresByDifficulty,
   computeTimeEfficiency,
-  type ScoringEvaluation,
 } from '../scoring'
 
 // Helper to create a mock evaluation
-function createEval(
-  overrides: Partial<ScoringEvaluation> = {},
-): ScoringEvaluation {
+function createEval(overrides: Partial<ScoringEvaluation> = {}): ScoringEvaluation {
   return {
     difficulty: 'medium',
     outcome: 'success',

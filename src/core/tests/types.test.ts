@@ -4,14 +4,14 @@
 
 import { describe, expect, test } from 'bun:test'
 import {
+  type Hole,
+  type Position,
+  SPECIAL_ACTIONS,
+  VALID_MOVES,
   getPerspectiveRotationDescription,
   isPositionInHole,
   keyToPos,
   posToKey,
-  SPECIAL_ACTIONS,
-  VALID_MOVES,
-  type Hole,
-  type Position,
 } from '../types'
 
 describe('posToKey', () => {

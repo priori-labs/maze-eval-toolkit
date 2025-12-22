@@ -4,16 +4,16 @@
 
 import { describe, expect, test } from 'bun:test'
 import {
+  RENDERERS,
   generateAllPrompts,
   generatePrompt,
-  renderAdjacency,
   renderASCII,
+  renderAdjacency,
   renderBlock,
-  renderCoordinateToken,
   renderCoordMatrix,
+  renderCoordinateToken,
   renderEdges,
   renderMatrix2D,
-  RENDERERS,
 } from '../maze-renderer'
 import type { GeneratedMaze } from '../types'
 

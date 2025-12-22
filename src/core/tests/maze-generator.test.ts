@@ -5,11 +5,10 @@
 import { describe, expect, test } from 'bun:test'
 import { generateMaze } from '../maze-generator'
 import { solveMaze } from '../maze-solver'
-import type { Difficulty } from '../types'
 
 describe('generateMaze', () => {
   test('generates a valid maze with correct dimensions', () => {
-    const maze = generateMaze('simple')
+    const maze = generateMaze('simple')!
 
     expect(maze.grid.length).toBeGreaterThan(0)
     expect(maze.grid[0]!.length).toBeGreaterThan(0)
@@ -18,7 +17,7 @@ describe('generateMaze', () => {
   })
 
   test('generates a maze with start and goal positions', () => {
-    const maze = generateMaze('easy')
+    const maze = generateMaze('easy')!
 
     expect(maze.start).toBeDefined()
     expect(maze.goal).toBeDefined()
@@ -29,7 +28,7 @@ describe('generateMaze', () => {
   })
 
   test('start and goal are within maze bounds', () => {
-    const maze = generateMaze('medium')
+    const maze = generateMaze('medium')!
 
     expect(maze.start.x).toBeLessThan(maze.width)
     expect(maze.start.y).toBeLessThan(maze.height)
@@ -38,14 +37,14 @@ describe('generateMaze', () => {
   })
 
   test('generates a solvable maze', () => {
-    const maze = generateMaze('simple')
+    const maze = generateMaze('simple')!
     const stats = solveMaze(maze.grid, maze.start, maze.goal)
 
     expect(stats.shortestPath).toBeGreaterThan(0)
   })
 
   test('maze has valid cell structure', () => {
-    const maze = generateMaze('easy')
+    const maze = generateMaze('easy')!
 
     for (let y = 0; y < maze.height; y++) {
       for (let x = 0; x < maze.width; x++) {
@@ -62,7 +61,7 @@ describe('generateMaze', () => {
   })
 
   test('boundary cells have outer walls', () => {
-    const maze = generateMaze('simple')
+    const maze = generateMaze('simple')!
 
     // Top row should have top walls
     for (let x = 0; x < maze.width; x++) {
@@ -86,7 +85,7 @@ describe('generateMaze', () => {
   })
 
   test('maze has required metadata', () => {
-    const maze = generateMaze('hard')
+    const maze = generateMaze('hard')!
 
     expect(maze.id).toBeDefined()
     expect(typeof maze.id).toBe('string')
@@ -96,15 +95,12 @@ describe('generateMaze', () => {
   })
 
   test('different difficulties produce different maze sizes', () => {
-    const simple = generateMaze('simple')
-    const hard = generateMaze('hard')
-
     // Hard mazes should generally be larger (though there's randomness)
     // We test multiple times to reduce flakiness
     let hardLarger = 0
     for (let i = 0; i < 5; i++) {
-      const s = generateMaze('simple')
-      const h = generateMaze('hard')
+      const s = generateMaze('simple')!
+      const h = generateMaze('hard')!
       if (h.width * h.height > s.width * s.height) hardLarger++
     }
     expect(hardLarger).toBeGreaterThanOrEqual(3) // At least 3 out of 5 should be larger
@@ -114,7 +110,7 @@ describe('generateMaze', () => {
 describe('generateMaze with spine-first mode', () => {
   test('generates a solvable maze with spine-first algorithm', () => {
     // Use 'simple' for faster generation, pass maxAttempts as second param
-    const maze = generateMaze('simple', 2500, { mode: 'spine-first' })
+    const maze = generateMaze('simple', 2500, { mode: 'spine-first' })!
 
     // Generator can return null if it fails to meet requirements
     expect(maze).not.toBeNull()
