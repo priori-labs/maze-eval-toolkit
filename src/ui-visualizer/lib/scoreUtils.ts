@@ -207,6 +207,7 @@ export const FORMAT_COLORS: Record<PromptFormat, string> = {
   coordmatrix: '#a78bfa', // violet-400
   matrix2d: '#22d3ee', // cyan-400
   coordtoken: '#c084fc', // purple-400
+  blockgrid: '#f59e0b', // amber-500
 }
 
 /**
@@ -218,6 +219,7 @@ export const FORMAT_ORDER: PromptFormat[] = [
   'edges',
   'adjacency',
   'coordtoken',
+  'blockgrid',
   'block',
   'ascii',
 ]

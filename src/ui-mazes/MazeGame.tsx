@@ -116,6 +116,7 @@ export default function MazeGame() {
     blockFormat: true,
     explicitEdges: true,
     coordinateToken: false,
+    blockGrid: false,
     includeUnreachableInstructions: false,
     applyTimePressure: false,
     executionMode: 'fullSolution',

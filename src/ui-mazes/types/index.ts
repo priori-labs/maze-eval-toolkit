@@ -82,6 +82,7 @@ export interface PromptViewOptions {
   blockFormat: boolean
   explicitEdges: boolean
   coordinateToken: boolean
+  blockGrid: boolean
   includeUnreachableInstructions: boolean
   applyTimePressure: boolean
   executionMode: 'fullSolution' | 'moveByMove'

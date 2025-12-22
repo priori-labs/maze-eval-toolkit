@@ -118,6 +118,7 @@ export type PromptFormat =
   | 'coordmatrix'
   | 'matrix2d'
   | 'coordtoken'
+  | 'blockgrid'
 
 /**
  * All available prompt formats
@@ -132,6 +133,7 @@ export const PROMPT_FORMATS: PromptFormat[] = [
   'coordmatrix',
   'matrix2d',
   'coordtoken',
+  'blockgrid',
 ]
 
 /**

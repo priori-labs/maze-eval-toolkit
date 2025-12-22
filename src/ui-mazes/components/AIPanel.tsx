@@ -778,6 +778,12 @@ export function AIPanel({
         checked: promptViewOptions.coordinateToken,
         group: 'Maze Format Options',
       },
+      {
+        id: 'blockGrid',
+        label: 'Block Grid',
+        checked: promptViewOptions.blockGrid,
+        group: 'Maze Format Options',
+      },
       // Prompt Options
       {
         id: 'moveByMove',

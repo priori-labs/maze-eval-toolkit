@@ -33,6 +33,7 @@ export const generateAIPrompt = (
     blockFormat: false,
     explicitEdges: false,
     coordinateToken: false,
+    blockGrid: false,
     includeUnreachableInstructions: false,
     applyTimePressure: false,
     executionMode: 'fullSolution',
@@ -52,6 +53,7 @@ export const generateAIPrompt = (
   if (viewOptions.blockFormat) formats.push('block')
   if (viewOptions.explicitEdges) formats.push('edges')
   if (viewOptions.coordinateToken) formats.push('coordtoken')
+  if (viewOptions.blockGrid) formats.push('blockgrid')
 
   // Create a GeneratedMaze-like object for core
   const maze: GeneratedMaze = {

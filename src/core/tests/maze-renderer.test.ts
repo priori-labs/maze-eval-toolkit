@@ -16,6 +16,7 @@ import {
   renderMatrix2D,
 } from '../maze-renderer'
 import type { GeneratedMaze } from '../types'
+import { PROMPT_FORMATS } from '../types'
 
 /**
  * Create a simple 3x3 test maze
@@ -214,8 +215,11 @@ describe('renderCoordinateToken', () => {
 })
 
 describe('RENDERERS', () => {
-  test('includes all 9 format renderers', () => {
-    expect(Object.keys(RENDERERS)).toHaveLength(9)
+  test('includes all format renderers', () => {
+    expect(Object.keys(RENDERERS)).toHaveLength(PROMPT_FORMATS.length)
+    for (const format of PROMPT_FORMATS) {
+      expect(RENDERERS[format]).toBeDefined()
+    }
     expect(RENDERERS.ascii).toBeDefined()
     expect(RENDERERS.block).toBeDefined()
     expect(RENDERERS.adjacency).toBeDefined()
@@ -225,6 +229,7 @@ describe('RENDERERS', () => {
     expect(RENDERERS.coordmatrix).toBeDefined()
     expect(RENDERERS.matrix2d).toBeDefined()
     expect(RENDERERS.coordtoken).toBeDefined()
+    expect(RENDERERS.blockgrid).toBeDefined()
   })
 })
 
@@ -313,11 +318,11 @@ describe('generatePrompt', () => {
 })
 
 describe('generateAllPrompts', () => {
-  test('generates prompts for all 9 formats', () => {
+  test('generates prompts for all formats', () => {
     const maze = createTestMaze()
     const prompts = generateAllPrompts(maze)
 
-    expect(Object.keys(prompts)).toHaveLength(9)
+    expect(Object.keys(prompts)).toHaveLength(10)
     expect(prompts.ascii).toContain('--- ASCII VIEW ---')
     expect(prompts.block).toContain('--- BLOCK VIEW ---')
     expect(prompts.adjacency).toContain('--- ADJACENCY VIEW ---')
@@ -325,5 +330,6 @@ describe('generateAllPrompts', () => {
     expect(prompts.coordmatrix).toContain('--- COORDMATRIX VIEW ---')
     expect(prompts.matrix2d).toContain('--- MATRIX2D VIEW ---')
     expect(prompts.coordtoken).toContain('--- COORDTOKEN VIEW ---')
+    expect(prompts.blockgrid).toContain('--- BLOCKGRID VIEW ---')
   })
 })

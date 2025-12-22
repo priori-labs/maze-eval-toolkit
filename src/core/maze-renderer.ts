@@ -624,6 +624,73 @@ export function renderCoordinateToken(
 }
 
 /**
+ * Render maze as integer grid (ARC-style 2D array)
+ *
+ * Encoding (bitmask):
+ * - 1 = wall top
+ * - 2 = wall right
+ * - 4 = wall bottom
+ * - 8 = wall left
+ * - 16 = start
+ * - 32 = goal
+ * - 64 = hole (void)
+ */
+export function renderBlockGrid(maze: GeneratedMaze, options?: ExperimentalRenderOptions): string {
+  const { grid, width, height, start, goal } = maze
+  const holes = options?.holes ?? []
+  const rows = height * 2 + 1
+  const cols = width * 2 + 1
+
+  const output: number[][] = Array.from({ length: rows }, () => Array(cols).fill(0))
+
+  // Fill with walls first
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      output[y]![x] = 1
+    }
+  }
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const cell = grid[y]![x]!
+      const gy = y * 2 + 1
+      const gx = x * 2 + 1
+      const isHole = isPositionInHole({ x, y }, holes)
+
+      output[gy]![gx] = isHole ? 4 : 0
+
+      if (!cell.walls.top) output[gy - 1]![gx] = 0
+      if (!cell.walls.right) output[gy]![gx + 1] = 0
+      if (!cell.walls.bottom) output[gy + 1]![gx] = 0
+      if (!cell.walls.left) output[gy]![gx - 1] = 0
+    }
+  }
+
+  const startY = start.y * 2 + 1
+  const startX = start.x * 2 + 1
+  output[startY]![startX] = 2
+
+  const goalY = goal.y * 2 + 1
+  const goalX = goal.x * 2 + 1
+  output[goalY]![goalX] = 3
+
+  const lines: string[] = []
+  lines.push('Legend:')
+  lines.push('0=path, 1=wall, 2=start, 3=goal, 4=hole')
+  lines.push('')
+  lines.push('Grid:')
+  lines.push('[')
+  for (let i = 0; i < output.length; i++) {
+    const row = output[i]!
+    const suffix = i === output.length - 1 ? '' : ','
+    lines.push(`  [${row.join(', ')}]${suffix}`)
+  }
+  lines.push(']')
+
+  return lines.join('\n')
+}
+
+/**
  * Render maze as combined edges + ASCII format
  * Provides both the explicit graph edges and visual ASCII representation
  */
@@ -676,6 +743,7 @@ export const RENDERERS: Record<PromptFormat, MazeRenderer> = {
   coordmatrix: { name: 'coordmatrix', render: renderCoordMatrix },
   matrix2d: { name: 'matrix2d', render: renderMatrix2D },
   coordtoken: { name: 'coordtoken', render: renderCoordinateToken },
+  blockgrid: { name: 'blockgrid', render: renderBlockGrid },
 }
 
 /**
@@ -740,6 +808,7 @@ export function generatePrompt(
   }
 
   // Add requested format sections with appropriate legends
+  const includesBlockGrid = formats.includes('blockgrid')
   for (const format of formats) {
     const renderer = RENDERERS[format]
     if (renderer) {
@@ -762,6 +831,14 @@ export function generatePrompt(
         sections.push('')
         sections.push('LEGEND:')
         sections.push(legends.join('\n'))
+      }
+      if (includesBlockGrid && format === 'blockgrid') {
+        sections.push('')
+        sections.push('BLOCKGRID NOTE:')
+        sections.push('- Moves are still between maze cells (odd,odd positions in this grid).')
+        sections.push(
+          '- A move RIGHT goes from one cell to the next (skipping over the wall cell between).',
+        )
       }
       sections.push('')
     }
@@ -868,5 +945,6 @@ export function generateAllPrompts(
     coordmatrix: generatePrompt(maze, ['coordmatrix'], specialInstructions, experimentalOptions),
     matrix2d: generatePrompt(maze, ['matrix2d'], specialInstructions, experimentalOptions),
     coordtoken: generatePrompt(maze, ['coordtoken'], specialInstructions, experimentalOptions),
+    blockgrid: generatePrompt(maze, ['blockgrid'], specialInstructions, experimentalOptions),
   }
 }
