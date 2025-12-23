@@ -6,8 +6,8 @@
  * Usage: bun run src/cli/sync-maze-ids.ts <test-set-path>
  */
 
-import { readFileSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 interface MinimalMaze {
   id: string

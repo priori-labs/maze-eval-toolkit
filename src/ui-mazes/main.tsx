@@ -28,17 +28,17 @@ window.syncMazeIds = async () => {
     const testSet = await response.json()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = syncIdsFromTestSet(testSet as any)
-    console.log(`Sync complete:`)
+    console.log('Sync complete:')
     console.log(`  Updated: ${result.updated} mazes`)
     console.log(`  Matched: ${result.matched.length} mazes`)
     if (result.matched.length > 0) {
-      console.log(`  Matched mazes:`)
+      console.log('  Matched mazes:')
       for (const m of result.matched) {
         console.log(`    - ${m.name}: ${m.id}`)
       }
     }
     if (result.unmatched.length > 0) {
-      console.log(`  Unmatched (no corresponding maze in test set):`)
+      console.log('  Unmatched (no corresponding maze in test set):')
       for (const name of result.unmatched) {
         console.log(`    - ${name}`)
       }
