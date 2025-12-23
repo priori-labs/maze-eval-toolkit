@@ -43,6 +43,7 @@ export const generateAIPrompt = (
   moveByMoveContext: MoveByMoveContext | null = null,
   wildcardTile: WildcardTile = null,
   perspectiveRotation: PerspectiveRotation = 'none',
+  specialInstructions?: string,
 ): string => {
   // Map UI view options to prompt formats
   const formats: PromptFormat[] = []
@@ -69,7 +70,7 @@ export const generateAIPrompt = (
   }
 
   // Call core's generatePrompt with experimental options
-  return generatePrompt(maze, formats, undefined, {
+  return generatePrompt(maze, formats, specialInstructions, {
     holes,
     exitDoorPair,
     wildcardTile,

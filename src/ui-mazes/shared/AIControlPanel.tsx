@@ -2,6 +2,7 @@
  * AI Control Panel - Shared component for AI agent controls
  */
 
+import { MODELS } from '@/core'
 import { Button } from '@/ui-library/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/ui-library/components/ui/card'
 import { Checkbox } from '@/ui-library/components/ui/checkbox'
@@ -18,7 +19,6 @@ import { toast } from '@/ui-library/components/ui/sonner'
 import { Copy } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { formatCost, formatDuration, formatNumber } from '../lib/format'
-import { OPENROUTER_MODELS } from '../lib/openrouter-models'
 import { SquareLoader } from './SquareLoader'
 import type { AgentLog, HistoryItem, SessionMetrics } from './types'
 
@@ -265,7 +265,7 @@ export function AIControlPanel({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {OPENROUTER_MODELS.map((m) => (
+                {MODELS.map((m) => (
                   <SelectItem key={m.id} value={m.id}>
                     {m.name}
                   </SelectItem>

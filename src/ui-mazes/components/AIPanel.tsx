@@ -133,16 +133,14 @@ export function AIPanel({
     }
   }, [gameKey])
 
-  // Build full prompt with optional special instructions
+  // Build full prompt (special instructions are now included by core's generatePrompt)
   const buildFullPrompt = useCallback(() => {
     // For move-by-move mode, generate the initial prompt (no moves yet)
-    const basePrompt =
-      promptViewOptions.executionMode === 'moveByMove'
-        ? generatePrompt({ startPos, currentPos: startPos, moveHistory: [] })
-        : prompt
-    if (!specialInstructions.trim()) return basePrompt
-    return `${basePrompt}\nSPECIAL ADDITIONAL INSTRUCTIONS:\n${specialInstructions.trim()}`
-  }, [prompt, specialInstructions, promptViewOptions.executionMode, generatePrompt, startPos])
+    if (promptViewOptions.executionMode === 'moveByMove') {
+      return generatePrompt({ startPos, currentPos: startPos, moveHistory: [] })
+    }
+    return prompt
+  }, [prompt, promptViewOptions.executionMode, generatePrompt, startPos])
 
   // Handle copy prompt with special instructions included
   const handleCopyPrompt = useCallback(async () => {
@@ -357,23 +355,20 @@ export function AIPanel({
           break
         }
 
-        // Generate prompt with current context
+        // Generate prompt with current context (special instructions included by core)
         const context: MoveByMoveContext = {
           startPos,
           currentPos,
           moveHistory: executedMoves,
         }
         const movePrompt = generatePrompt(context)
-        const fullMovePrompt = specialInstructions.trim()
-          ? `${movePrompt}\nSPECIAL ADDITIONAL INSTRUCTIONS:\n${specialInstructions.trim()}`
-          : movePrompt
 
         try {
           setInflightStartTime(Date.now())
           addLog('request', `Move ${moveNum + 1}: Getting next move...`)
 
           const response = await getSingleMove(
-            fullMovePrompt,
+            movePrompt,
             config,
             (level: LogLevel, message: string, details?: string) => addLog(level, message, details),
           )

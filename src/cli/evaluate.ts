@@ -9,6 +9,7 @@ import chalk from 'chalk'
 import { Command } from 'commander'
 import pLimit from 'p-limit'
 import { v4 as uuidv4 } from 'uuid'
+import { CLI_MODELS, DIFFICULTIES, PROMPT_FORMATS, toSelectChoices } from '../core'
 import { generatePrompt } from '../core/maze-renderer'
 import { validateSolutionWithConstraints } from '../core/maze-solver'
 import type {
@@ -19,7 +20,6 @@ import type {
   PromptFormat,
   TestSetFile,
 } from '../core/types'
-import { DIFFICULTIES, PROMPT_FORMATS } from '../core/types'
 import { closeDatabase, initDatabase } from '../db/client'
 import { createEvaluationResult, insertEvaluation } from '../db/queries'
 import { createClient, evaluateMaze } from '../llm/openrouter'
@@ -36,20 +36,6 @@ interface EvaluateOptions {
   saveToDb: boolean
   trials: number
 }
-
-// Common models for quick selection
-const COMMON_MODELS = [
-  { name: 'Gemini 3 Pro Preview', value: 'google/gemini-3-pro-preview' },
-  { name: 'Gemini 3 Flash Preview', value: 'google/gemini-3-flash-preview' },
-  { name: 'GPT-5.2', value: 'openai/gpt-5.2' },
-  { name: 'GPT-4o', value: 'openai/gpt-4o' },
-  { name: 'Claude Opus 4.5', value: 'anthropic/claude-opus-4.5' },
-  { name: 'Claude Haiku 4.5', value: 'anthropic/claude-haiku-4.5' },
-  { name: 'Claude 3.5 Sonnet', value: 'anthropic/claude-3.5-sonnet' },
-  { name: 'Grok 4.1 Fast', value: 'x-ai/grok-4.1-fast' },
-  { name: 'Kimi K2 Thinking', value: 'moonshotai/kimi-k2-thinking' },
-  { name: 'Deepseek 3.2', value: 'deepseek/deepseek-v3.2' },
-]
 
 function findTestSets(): string[] {
   const dataDir = './test-sets'
@@ -90,10 +76,11 @@ async function promptForOptions(): Promise<EvaluateOptions> {
   })
 
   // Model selection
+  const cliModelChoices = toSelectChoices(CLI_MODELS)
   const modelChoice = await select({
     message: 'Select model:',
-    choices: COMMON_MODELS,
-    pageSize: COMMON_MODELS.length,
+    choices: cliModelChoices,
+    pageSize: cliModelChoices.length,
   })
 
   let model: string

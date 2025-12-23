@@ -42,8 +42,9 @@ export function convertToTestSetFile(mazes: SavedMazeDesign[], testSetName: stri
         : stats.shortestPath
 
     // Build GeneratedMaze structure
+    // Use persisted ID if available, otherwise generate new one
     const generatedMaze: GeneratedMaze = {
-      id: uuidv4(),
+      id: saved.id ?? uuidv4(),
       difficulty: saved.difficulty,
       width: saved.width,
       height: saved.height,

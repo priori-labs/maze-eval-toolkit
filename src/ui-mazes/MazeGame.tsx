@@ -688,6 +688,7 @@ export default function MazeGame() {
       null,
       wildcardTile,
       perspectiveRotation,
+      specialInstructions || undefined,
     )
   }, [
     maze,
@@ -698,6 +699,7 @@ export default function MazeGame() {
     exitDoorPair,
     wildcardTile,
     perspectiveRotation,
+    specialInstructions,
   ])
 
   // Generate prompt with optional move-by-move context
@@ -716,6 +718,7 @@ export default function MazeGame() {
           context,
           wildcardTile,
           perspectiveRotation,
+          specialInstructions || undefined,
         )
       }
       return generateAIPrompt(
@@ -728,6 +731,7 @@ export default function MazeGame() {
         null,
         wildcardTile,
         perspectiveRotation,
+        specialInstructions || undefined,
       )
     },
     [
@@ -739,6 +743,7 @@ export default function MazeGame() {
       exitDoorPair,
       wildcardTile,
       perspectiveRotation,
+      specialInstructions,
     ],
   )
 
