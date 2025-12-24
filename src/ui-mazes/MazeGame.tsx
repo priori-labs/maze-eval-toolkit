@@ -2183,7 +2183,7 @@ export default function MazeGame() {
           </h1>
 
           {/* Game Status */}
-          {won && !aiWallCollision && (
+          {won && !aiWallCollision && !(aiConstraintValidation && !aiConstraintValidation.passed) && (
             <div className="text-[13px] font-semibold uppercase tracking-[0.2em] text-green-500 mb-2 animate-pulse">
               You won!
             </div>
