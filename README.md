@@ -2,6 +2,8 @@
 
 AI Maze Eval Toolkit - Various tools for building maze challenges and evaluating LLM spatial reasoning abilities.
 
+<img width="1728" height="995" alt="Image" src="https://github.com/user-attachments/assets/3c24a0d8-80f6-4db7-afbe-2a30785df169" />
+
 ## Quick Start
 
 ```bash
